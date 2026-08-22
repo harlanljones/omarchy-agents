@@ -7,6 +7,23 @@ Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https
 - **Agent usage** (`apps/omarchy-agent-usage`) — fork of Omarchy's first-party Agents widget focused on per-provider usage and limits.
 - **Provider assets** (`packages/provider-assets`) — single source for provider marks; each app consumes them through a repository-relative symlink, and plugin builds dereference the link so deployed plugin directories stay self-contained.
 
+## Screenshots
+
+<p align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="docs/screenshots/dashboard.png" alt="Web dashboard: provider standings, source coverage, and the local analyst rail" width="600">
+        <br><sub>Web dashboard — standings, coverage, and the local analyst</sub>
+      </td>
+      <td align="center">
+        <img src="apps/omarchy-agent-leaderboard/preview.png" alt="Agent Leaderboard bar widget: today standings and last seven days" width="230">
+        <br><sub>Agent Leaderboard bar widget</sub>
+      </td>
+    </tr>
+  </table>
+</p>
+
 ## Requirements
 
 - [Omarchy](https://omarchy.org) (Arch Linux + Hyprland) for the widgets

@@ -1,18 +1,31 @@
 # Omarchy Agents Dashboard
 
-This app is developed from the workspace root. Use `bun run dev --filter=@omarchy-agents/web` for development and `bun run check` for the full workspace verification.
-
 Private local dashboard for Omarchy agent usage and transcript evidence.
+
+This app is developed from the workspace root. Use `bun run dev --filter=@omarchy-agents/web` for development and `bun run check` for the full workspace verification.
 
 ## Local setup
 
+From a fresh clone of the workspace:
+
 ```bash
-bun install --frozen-lockfile
-bun run build
-systemctl --user enable --now ollama-omarchy-agents.service omarchy-agents-dashboard.service omarchy-agents-analysis.timer
+bun install
+bun run check                          # test + typecheck + build
+bun run dev --filter=@omarchy-agents/web
 ```
 
-Open `http://127.0.0.1:4317`. The first index runs in the background and metrics remain available while transcript indexing progresses.
+Open `http://127.0.0.1:4317`. The first index runs in the background and metrics remain available while transcript indexing progresses. Secret-like content is redacted before anything is persisted.
+
+Maintenance commands:
+
+```bash
+bun --filter=@omarchy-agents/web run index     # one-shot re-index
+bun --filter=@omarchy-agents/web run analyze   # index, then a nightly analyst report
+```
+
+The analyst needs [Ollama](https://ollama.com) running locally; model selection is controlled by `OLLAMA_MODEL` and `OLLAMA_FALLBACK_MODEL` — see [deploy/dashboard.env.example](deploy/dashboard.env.example).
+
+Production-style launches (dashboard service, analysis timer, Ollama unit, tunnel service) are managed outside this repository through chezmoi-owned systemd units — see [docs/chezmoi-boundary.md](../../docs/chezmoi-boundary.md).
 
 ## Remote setup
 
