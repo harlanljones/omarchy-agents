@@ -597,8 +597,10 @@ select {
 }
 .filters {
   display: flex;
+  align-items: end;
   gap: 14px;
   padding: 20px 0;
+  flex-wrap: wrap;
 }
 .filters label {
   display: grid;
@@ -618,6 +620,12 @@ select {
 .sessionlist {
   overflow: auto;
   border-right: 1px solid var(--line);
+  position: relative;
+}
+.ledger-empty {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
 }
 .session {
   width: 100%;
@@ -672,6 +680,8 @@ select {
 .transcript h2 {
   font-size: 14px;
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .event {
   padding: 18px 0;
@@ -822,7 +832,7 @@ select {
     gap: 10px;
   }
   .commandbar label {
-    display: none;
+    flex: 0 0 auto;
   }
   .standing {
     grid-template-columns: 36px 1fr 70px;
@@ -873,6 +883,11 @@ select {
   }
   .filters {
     overflow: auto;
+  }
+  .filters input,
+  .commandbar select,
+  .analyst textarea {
+    font-size: 16px;
   }
   .ledger {
     display: block;

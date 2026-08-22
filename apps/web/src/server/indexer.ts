@@ -68,11 +68,11 @@ export function parseJsonl(provider: string, path: string, content: string): { s
   return { session, events };
 }
 
-function persist(session: Session, events: Event[]) {
+export function persist(session: Session, events: Event[]) {
   db.transaction(() => {
     db.query(`INSERT INTO sessions VALUES ($id,$provider,$model,$project,$title,$started,$ended,$path,$key,$input,$output,$read,$write,$errors,$tools,$meta,$now)
       ON CONFLICT(id) DO UPDATE SET model=excluded.model,project=excluded.project,title=excluded.title,started_at=excluded.started_at,ended_at=excluded.ended_at,token_input=excluded.token_input,token_output=excluded.token_output,cache_read=excluded.cache_read,cache_write=excluded.cache_write,error_count=excluded.error_count,tool_count=excluded.tool_count,metadata_json=excluded.metadata_json,indexed_at=excluded.indexed_at`).run({
-      $id: session.id, $provider: session.provider, $model: session.model, $project: session.project, $title: session.title, $started: session.startedAt, $ended: session.endedAt, $path: session.sourcePath, $key: session.sourceKey, $input: session.tokenInput, $output: session.tokenOutput, $read: session.cacheRead, $write: session.cacheWrite, $errors: session.errorCount, $tools: session.toolCount, $meta: JSON.stringify(session.metadata), $now: new Date().toISOString()
+      id: session.id, provider: session.provider, model: session.model, project: session.project, title: session.title, started: session.startedAt, ended: session.endedAt, path: session.sourcePath, key: session.sourceKey, input: session.tokenInput, output: session.tokenOutput, read: session.cacheRead, write: session.cacheWrite, errors: session.errorCount, tools: session.toolCount, meta: JSON.stringify(session.metadata), now: new Date().toISOString()
     });
     db.query("DELETE FROM events_fts WHERE session_id = ?").run(session.id);
     db.query("DELETE FROM events WHERE session_id = ?").run(session.id);

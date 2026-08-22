@@ -10,8 +10,28 @@ import { UsageRecordV1 } from "./shared/schemas";
 
 const app = new Hono(); app.use("*", security);
 app.get("/api/health", async c => c.json({ status: "ok", index: indexProgress(), model: await modelHealth(), database: { path: process.env.OMARCHY_AGENTS_DB ? "configured" : "default" } }));
-app.get("/api/overview", c => { const period = c.req.query("period") ?? "week"; const records = (db.query("SELECT record_json FROM usage_records").all() as any[]).flatMap(r => { const parsed = UsageRecordV1.safeParse(json(r.record_json, {})); return parsed.success ? [parsed.data] : []; }); const board = rank(records, period); return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: ["claude", "codex", "opencode"].includes(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() }); });
-app.get("/api/timeseries", c => { const days = Math.min(365, Math.max(1, Number(c.req.query("days") ?? 30))); return c.json({ days, rows: db.query("SELECT strftime('%Y-%m-%d',started_at) day,provider,SUM(token_input+token_output+cache_read+cache_write) tokens,COUNT(*) sessions FROM sessions WHERE started_at>=datetime('now',?) GROUP BY day,provider ORDER BY day").all(`-${days} days`) }); });
+app.get("/api/overview", c => {
+  const requestedPeriod = c.req.query("period") ?? "week";
+  const period = ["today", "week", "month", "all"].includes(requestedPeriod) ? requestedPeriod : "week";
+  const project = c.req.query("project")?.trim() ?? "";
+  const records = (db.query("SELECT record_json FROM usage_records").all() as any[]).flatMap(r => { const parsed = UsageRecordV1.safeParse(json(r.record_json, {})); return parsed.success ? [parsed.data] : []; });
+  let board = rank(records, period);
+  if (project) {
+    const since = period === "today" ? "start of day" : period === "week" ? "-7 days" : period === "month" ? "-30 days" : null;
+    const clauses = ["project = ?"], args: any[] = [project];
+    if (since) { clauses.push("started_at >= datetime('now', ?)"); args.push(since); }
+    const totals = db.query(`SELECT provider providerId, SUM(token_input+token_output+cache_read+cache_write) tokens FROM sessions WHERE ${clauses.join(" AND ")} GROUP BY provider ORDER BY tokens DESC`).all(...args) as Array<{ providerId: string; tokens: number }>;
+    const total = totals.reduce((sum, row) => sum + Number(row.tokens), 0);
+    let previous = -1, rankNumber = 0;
+    board = { total, rows: totals.map((row, index) => { if (Number(row.tokens) !== previous) rankNumber = index + 1; previous = Number(row.tokens); return { ...row, providerName: row.providerId, tokens: Number(row.tokens), rank: rankNumber, share: total ? Number(row.tokens) / total : 0, coverage: "indexed", updatedAt: new Date().toISOString() }; }) } as any;
+  }
+  return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: ["claude", "codex", "opencode"].includes(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
+});
+app.get("/api/filter-options", c => c.json({
+  projects: (db.query("SELECT DISTINCT project FROM sessions WHERE project IS NOT NULL AND trim(project) <> '' ORDER BY project COLLATE NOCASE").all() as Array<{ project: string }>).map(row => row.project),
+  models: (db.query("SELECT DISTINCT model FROM sessions WHERE model IS NOT NULL AND trim(model) <> '' ORDER BY model COLLATE NOCASE").all() as Array<{ model: string }>).map(row => row.model),
+}));
+app.get("/api/timeseries", c => { const rawDays = Number(c.req.query("days") ?? 30), days = Number.isFinite(rawDays) ? Math.min(365, Math.max(1, Math.floor(rawDays))) : 30; const project = c.req.query("project")?.trim() ?? "", clauses = ["started_at>=datetime('now',?)"], args: any[] = [`-${days} days`]; if (project) { clauses.push("project=?"); args.push(project); } return c.json({ days, rows: db.query(`SELECT strftime('%Y-%m-%d',started_at) day,provider,SUM(token_input+token_output+cache_read+cache_write) tokens,COUNT(*) sessions FROM sessions WHERE ${clauses.join(" AND ")} GROUP BY day,provider ORDER BY day`).all(...args) }); });
 app.get("/api/sessions", c => { const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50))), offset = Math.max(0, Number(c.req.query("offset") ?? 0)); const clauses: string[] = [], args: any[] = []; for (const key of ["provider", "model", "project"] as const) if (c.req.query(key)) { clauses.push(`${key} LIKE ?`); args.push(`%${c.req.query(key)}%`); } if (c.req.query("errors") === "true") clauses.push("error_count>0"); const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""; const rows = db.query(`SELECT id,provider,model,project,title,started_at startedAt,ended_at endedAt,token_input tokenInput,token_output tokenOutput,cache_read cacheRead,cache_write cacheWrite,error_count errorCount,tool_count toolCount FROM sessions ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`).all(...args, limit, offset); const total = (db.query(`SELECT COUNT(*) total FROM sessions ${where}`).get(...args) as any).total; return c.json({ rows, total, limit, offset }); });
 app.get("/api/sessions/:id/events", c => { const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 100))), offset = Math.max(0, Number(c.req.query("offset") ?? 0)); return c.json({ rows: db.query("SELECT id,session_id sessionId,ordinal,kind,timestamp,text,tool_name toolName,source_locator sourceLocator FROM events WHERE session_id=? ORDER BY ordinal LIMIT ? OFFSET ?").all(c.req.param("id"), limit, offset), limit, offset }); });
 app.get("/api/reports", c => c.json({ rows: (db.query("SELECT * FROM reports ORDER BY created_at DESC LIMIT 50").all() as any[]).map(r => ({ id: r.id, createdAt: r.created_at, periodStart: r.period_start, periodEnd: r.period_end, model: r.model, summary: r.summary, detectors: json(r.detectors_json, []), suggestions: (db.query("SELECT * FROM suggestions WHERE report_id=?").all(r.id) as any[]).map(s => ({ ...s, evidence: json(s.evidence_json, []) })) })) }));

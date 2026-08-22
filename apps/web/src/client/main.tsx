@@ -8,6 +8,15 @@ import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
 import "./styles.css";
 
 type Nav = "overview" | "logs" | "analyst" | "settings";
+const navPaths: Record<Nav, string> = {
+  overview: "/overview",
+  logs: "/logs",
+  analyst: "/analyst",
+  settings: "/settings",
+};
+const navFromPath = (pathname = window.location.pathname): Nav =>
+  (Object.entries(navPaths).find(([, path]) => path === pathname)?.[0] as Nav) ??
+  "overview";
 type BoardRow = {
   providerId: string;
   providerName: string;
@@ -248,7 +257,15 @@ function Overview({
   openRail: () => void;
   railOpen: boolean;
 }) {
-  const [period, setPeriod] = useState("week"),
+  const initialQuery = useMemo(() => new URLSearchParams(window.location.search), []);
+  const requestedPeriod = initialQuery.get("period") ?? "week";
+  const [period, setPeriod] = useState(
+      ["today", "week", "month", "all"].includes(requestedPeriod)
+        ? requestedPeriod
+        : "week",
+    ),
+    [project, setProject] = useState(initialQuery.get("project") ?? ""),
+    [projects, setProjects] = useState<string[]>([]),
     [board, setBoard] = useState<any>({
       rows: [],
       total: 0,
@@ -258,22 +275,41 @@ function Overview({
     [series, setSeries] = useState<any[]>([]),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
+  const updateUrl = (nextPeriod: string, nextProject: string) => {
+    const url = new URL(window.location.href);
+    url.pathname = navPaths.overview;
+    if (nextPeriod === "week") url.searchParams.delete("period");
+    else url.searchParams.set("period", nextPeriod);
+    if (nextProject) url.searchParams.set("project", nextProject);
+    else url.searchParams.delete("project");
+    window.history.replaceState({}, "", url);
+  };
   useEffect(() => {
+    api<{ projects: string[] }>("/api/filter-options")
+      .then((result) => setProjects(result.projects))
+      .catch(() => setProjects([]));
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
     setError("");
     setLoading(true);
+    const projectQuery = project ? `&project=${encodeURIComponent(project)}` : "";
     Promise.all([
-      api<any>(`/api/overview?period=${period}`),
+      api<any>(`/api/overview?period=${period}${projectQuery}`, { signal: controller.signal }),
       api<any>(
-        `/api/timeseries?days=${period === "today" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365}`,
+        `/api/timeseries?days=${period === "today" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365}${projectQuery}`,
+        { signal: controller.signal },
       ),
     ])
       .then(([b, s]) => {
         setBoard(b);
         setSeries(s.rows);
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => { if (e.name !== "AbortError") setError(e.message); })
       .finally(() => setLoading(false));
-  }, [period]);
+    updateUrl(period, project);
+    return () => controller.abort();
+  }, [period, project]);
   return (
     <div className="overview">
       <section className="scorehead">
@@ -321,16 +357,10 @@ function Overview({
           ))}
         </div>
         <label>
-          View
-          <select>
-            <option>By provider</option>
-            <option>By model</option>
-          </select>
-        </label>
-        <label>
-          Project
-          <select>
-            <option>All projects</option>
+          Project path
+          <select value={project} onChange={(event) => setProject(event.target.value)}>
+            <option value="">All project paths</option>
+            {projects.map((path) => <option value={path} key={path}>{path}</option>)}
           </select>
         </label>
       </div>
@@ -428,6 +458,9 @@ function Logs() {
     [selected, setSelected] = useState<any>(null),
     [events, setEvents] = useState<any[]>([]),
     [loading, setLoading] = useState(true),
+    [error, setError] = useState(""),
+    [eventsLoading, setEventsLoading] = useState(false),
+    [eventsError, setEventsError] = useState(""),
     [filters, setFilters] = useState({
       provider: "",
       project: "",
@@ -439,16 +472,30 @@ function Logs() {
     errors: String(filters.errors),
   } as any);
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
-    api<any>(`/api/sessions?${query}`)
-      .then(setData)
+    setError("");
+    api<any>(`/api/sessions?${query}`, { signal: controller.signal })
+      .then((result) => {
+        setData(result);
+        setSelected((current: any) => result.rows.some((row: any) => row.id === current?.id) ? current : null);
+      })
+      .catch((reason) => { if (reason.name !== "AbortError") { setError(reason.message); setData({ rows: [], total: 0 }); } })
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [filters.provider, filters.project, filters.errors]);
   useEffect(() => {
-    if (selected)
-      api<any>(`/api/sessions/${selected.id}/events`).then((r) =>
-        setEvents(r.rows),
-      );
+    const controller = new AbortController();
+    setEvents([]);
+    setEventsError("");
+    if (selected) {
+      setEventsLoading(true);
+      api<any>(`/api/sessions/${encodeURIComponent(selected.id)}/events`, { signal: controller.signal })
+        .then((r) => setEvents(r.rows))
+        .catch((reason) => { if (reason.name !== "AbortError") setEventsError(reason.message); })
+        .finally(() => setEventsLoading(false));
+    } else setEventsLoading(false);
+    return () => controller.abort();
   }, [selected]);
   const virtual = useVirtualizer({
     count: data.rows.length,
@@ -497,7 +544,11 @@ function Logs() {
           />{" "}
           Errors only
         </label>
+        {(filters.provider || filters.project || filters.errors) && (
+          <Button onClick={() => setFilters({ provider: "", project: "", errors: false })}>Clear filters</Button>
+        )}
       </div>
+      {error && <div className="notice error" role="alert"><strong>Sessions could not be loaded.</strong><span>{error}</span></div>}
       <div className="ledger">
         <div
           className="sessionlist"
@@ -533,6 +584,12 @@ function Logs() {
                 </button>
               );
             })}
+            {!loading && !error && !data.rows.length && (
+              <div className="empty ledger-empty">
+                <strong>{filters.provider || filters.project || filters.errors ? "No sessions match these filters" : "No sessions have been indexed"}</strong>
+                <span>{filters.provider || filters.project || filters.errors ? "Clear or adjust the filters to widen the ledger." : "Run Rebuild index in Settings after confirming local agent logs are available."}</span>
+              </div>
+            )}
           </div>
         </div>
         <section className="transcript" aria-live="polite">
@@ -556,12 +613,13 @@ function Logs() {
               <a href={`#e-${e.id}`}>Evidence anchor</a>
             </article>
           ))}
-          {!selected && (
+          {eventsLoading && <div className="empty"><strong>Loading evidence…</strong><span>Reading redacted session events.</span></div>}
+          {eventsError && <div className="notice error" role="alert"><strong>Evidence could not be loaded.</strong><span>{eventsError}</span></div>}
+          {!selected && !eventsLoading && (
             <div className="empty">
-              <strong>Evidence opens here</strong>
+              <strong>{data.rows.length ? "Evidence opens here" : "Waiting for indexed evidence"}</strong>
               <span>
-                Choose a session to inspect its redacted prompt, response, tool,
-                and error events.
+                {data.rows.length ? "Choose a session to inspect its redacted prompt, response, tool, and error events." : "Sessions will appear here after the local index successfully processes agent logs."}
               </span>
             </div>
           )}
@@ -817,7 +875,7 @@ function Settings() {
 }
 
 function App() {
-  const [nav, setNav] = useState<Nav>("overview"),
+  const [nav, setNav] = useState<Nav>(() => navFromPath()),
     [rail, setRail] = useState(false),
     [compactLayout, setCompactLayout] = useState(false);
   const railRef = useRef<HTMLElement>(null);
@@ -835,6 +893,16 @@ function App() {
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
   }, []);
+  useEffect(() => {
+    const sync = () => setNav(navFromPath());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const navigate = (next: Nav) => {
+    if (next !== nav) window.history.pushState({}, "", navPaths[next]);
+    setNav(next);
+    setRail(false);
+  };
   const openRail = () => {
     returnFocus.current = document.activeElement as HTMLElement;
     setRail(true);
@@ -888,7 +956,7 @@ function App() {
             <button
               key={x.id}
               aria-current={nav === x.id ? "page" : undefined}
-              onClick={() => setNav(x.id)}
+              onClick={() => navigate(x.id)}
             >
               <i>
                 <NavIcon id={x.id} />
@@ -951,7 +1019,7 @@ function App() {
           <button
             key={x.id}
             aria-current={nav === x.id ? "page" : undefined}
-            onClick={() => setNav(x.id)}
+            onClick={() => navigate(x.id)}
           >
             {x.label}
           </button>
