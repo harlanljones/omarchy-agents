@@ -31,6 +31,36 @@ export const tools = {
   recommendations: (_args: any) => db.query("SELECT id,title,impact,effort,confidence,rationale,status,evidence_json FROM suggestions ORDER BY created_at DESC LIMIT 20").all().map((r: any) => ({ ...r, evidence: json(r.evidence_json, []) }))
 };
 
+function toolArguments(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseTextToolCall(content: unknown) {
+  if (typeof content !== "string") return null;
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+  const wrapped = trimmed.match(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/i)?.[1]
+    ?? trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const candidate = wrapped.match(/\{[\s\S]*\}/)?.[0] ?? wrapped;
+  let parsed: any;
+  try { parsed = JSON.parse(candidate); } catch { return null; }
+  const name = parsed?.name ?? parsed?.function?.name;
+  if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(tools, name)) return null;
+  const args = parsed?.arguments ?? parsed?.parameters ?? parsed?.function?.arguments ?? {};
+  return {
+    type: "function",
+    function: { name, arguments: JSON.stringify(toolArguments(args)) },
+  };
+}
+
 export function detect() {
   const findings: any[] = [];
   const totals = db.query("SELECT provider,SUM(token_input+token_output+cache_read+cache_write) tokens,COUNT(*) sessions,SUM(error_count) errors,SUM(tool_count) tools,SUM(cache_read) cache_read,SUM(token_input) input FROM sessions WHERE started_at>=datetime('now','-7 days') GROUP BY provider").all() as any[];
@@ -66,24 +96,53 @@ export function chatStream(prompt: string) {
     try {
       const health = await modelHealth();
       if (!health.ready) { emit("error", "Ollama is not ready. Start the local model service and try again."); emit("done", {}); return; }
-      let messages: any[] = [{ role: "system", content: "You are the read-only Omarchy Agents analyst. Use tools before claims. Cite only evidence IDs returned by tools, formatted [ev_x]. Be concise and never imply you changed configuration." }, { role: "user", content: redact(prompt) }];
+      const originalPrompt = redact(prompt);
+      const systemPrompt = "You are the read-only Omarchy Agents analyst. Use tools before claims. Cite only evidence IDs returned by tools, formatted [ev_x]. Be concise and never imply you changed configuration.";
+      let messages: any[] = [{ role: "system", content: systemPrompt }, { role: "user", content: originalPrompt }];
+      let promptToolFallback = false;
       for (let iteration = 0; iteration < 8; iteration++) {
         emit("thinking", { iteration: iteration + 1 });
-        const response = await fetch(`${ollama()}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: health.selected, messages, tools: toolDefs, stream: false }), signal: AbortSignal.timeout(90_000) });
+        const request: any = { model: health.selected, messages, stream: false };
+        if (!promptToolFallback) request.tools = toolDefs;
+        const response = await fetch(`${ollama()}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(90_000) });
         if (!response.ok) throw new Error(`Ollama returned ${response.status}`);
         const result = await response.json() as any, message = result.message ?? {};
-        messages.push(message);
-        if (!message.tool_calls?.length) {
+        const nativeCalls = message.tool_calls?.length ? message.tool_calls : null;
+        const textCall = nativeCalls ? null : parseTextToolCall(message.content);
+        const calls = nativeCalls ?? (textCall ? [textCall] : []);
+        if (!calls.length) {
+          messages.push(message);
           const content = redact(message.content ?? "").replace(/\[(ev_[a-f0-9]+)\]/g, (all, key) => valid.has(key) ? all : "[invalid citation removed]");
           emit("content", content);
           for (const item of valid.values()) if (content.includes(`[${item.id}]`)) emit("citation", item);
           db.query("INSERT INTO chats VALUES (?,?,?,?,?)").run(randomUUID(), "assistant", content, JSON.stringify([...valid.values()]), new Date().toISOString());
           emit("done", { model: health.selected }); return;
         }
-        for (const call of message.tool_calls) {
-          const name = call.function?.name as keyof typeof tools, fn = tools[name]; if (!fn) continue;
-          const output = fn(call.function?.arguments ?? {}); for (const c of Array.isArray(output) ? output : []) if (c?.id?.startsWith?.("ev_")) valid.set(c.id, c);
-          emit("tool", { name, count: Array.isArray(output) ? output.length : 1 }); messages.push({ role: "tool", tool_name: name, content: JSON.stringify(output) });
+        const normalizedCalls = calls.map((call: any) => ({
+          type: "function",
+          function: {
+            name: call?.function?.name,
+            arguments: toolArguments(call?.function?.arguments),
+          },
+        }));
+        if (textCall) {
+          promptToolFallback = true;
+          messages = [
+            { role: "system", content: `${systemPrompt} Native function calling is unavailable. Use the supplied tool result and answer directly in plain language; do not output JSON or another tool call.` },
+            { role: "user", content: originalPrompt },
+          ];
+        } else {
+          messages.push({ role: "assistant", content: "", tool_calls: normalizedCalls });
+        }
+        for (const call of normalizedCalls) {
+          const name = call?.function?.name as keyof typeof tools, fn = tools[name]; if (!fn) continue;
+          const output = fn(toolArguments(call.function?.arguments)); for (const c of Array.isArray(output) ? output : []) if (c?.id?.startsWith?.("ev_")) valid.set(c.id, c);
+          emit("tool", { name, count: Array.isArray(output) ? output.length : 1 });
+          if (textCall) {
+            messages.push({ role: "user", content: `Tool result from ${name}:\n${JSON.stringify(output)}\nAnswer the original request directly.` });
+          } else {
+            messages.push({ role: "tool", content: JSON.stringify(output) });
+          }
         }
       }
       emit("error", "The analyst reached its eight-iteration safety limit."); emit("done", {});

@@ -147,10 +147,28 @@ function HistoryChart({ rows }: { rows: any[] }) {
       </div>
     );
   const width = 760,
-    height = 250,
-    margin = { top: 20, right: 10, bottom: 34, left: 48 };
+    height = 320,
+    margin = { top: 16, right: 12, bottom: 42, left: 64 };
   const providers = [...new Set(rows.map((r) => r.provider))] as string[],
-    days = [...new Set(rows.map((r) => r.day))] as string[];
+    rawDays = [...new Set(rows.map((r) => r.day))].sort() as string[],
+    days = rawDays.length < 2
+      ? rawDays
+      : Array.from(
+          {
+            length:
+              Math.floor(
+                (Date.parse(`${rawDays.at(-1)}T00:00:00Z`) -
+                  Date.parse(`${rawDays[0]}T00:00:00Z`)) /
+                  86400000,
+              ) + 1,
+          },
+          (_, index) =>
+            new Date(
+              Date.parse(`${rawDays[0]}T00:00:00Z`) + index * 86400000,
+            )
+              .toISOString()
+              .slice(0, 10),
+        );
   const data = days.map((day) =>
     Object.assign(
       { day },
@@ -178,26 +196,85 @@ function HistoryChart({ rows }: { rows: any[] }) {
     range: [height - margin.top - margin.bottom, 0],
     nice: true,
   });
+  const yMax = Number(y.domain()[1]) || max;
+  const yTicks = Array.from({ length: 5 }, (_, index) => (yMax / 4) * index);
+  const totals = data.map((day) => ({
+    day: day.day,
+    tokens: providers.reduce((sum, provider) => sum + Number(day[provider]), 0),
+  }));
+  const totalIndexed = totals.reduce((sum, day) => sum + day.tokens, 0);
+  const peak = totals.reduce(
+    (current, day) => (day.tokens > current.tokens ? day : current),
+    { day: "", tokens: 0 },
+  );
+  const providerTotals = providers.map((provider) => ({
+    provider,
+    tokens: data.reduce((sum, day) => sum + Number(day[provider]), 0),
+  }));
   const color = scaleOrdinal({
     domain: providers,
     range: providers.map((p) => colors[p] ?? "#77838d"),
   });
+  const labelStep = Math.max(1, Math.ceil(days.length / 7));
+  const dailySummary = totals
+    .filter((day) => day.tokens > 0)
+    .map((day) => `${day.day}: ${fmt.format(day.tokens)} tokens`)
+    .join("; ");
   return (
     <figure className="chart">
       <figcaption>
-        <strong>Indexed activity</strong>
-        <span>
-          {days.length
-            ? `${days[0]} — ${days.at(-1)}`
-            : "Waiting for indexed sessions"}
-        </span>
+        <div className="chart-heading">
+          <strong id="indexed-activity-title">Indexed activity</strong>
+          <span>
+            {days.length
+              ? `${days[0]} — ${days.at(-1)}`
+              : "Waiting for indexed sessions"}
+          </span>
+        </div>
+        <dl className="chart-summary" id="indexed-activity-summary">
+          <div>
+            <dt>Indexed tokens</dt>
+            <dd>{fmt.format(totalIndexed)}</dd>
+          </div>
+          <div>
+            <dt>Active days</dt>
+            <dd>{totals.filter((day) => day.tokens > 0).length}</dd>
+          </div>
+          <div>
+            <dt>Peak day</dt>
+            <dd>{peak.day ? `${peak.day.slice(5)} · ${fmt.format(peak.tokens)}` : "—"}</dd>
+          </div>
+        </dl>
       </figcaption>
+      <div className="chart-legend" role="list" aria-label="Providers in indexed activity">
+        {providerTotals.map(({ provider, tokens }) => (
+          <span role="listitem" key={provider}>
+            <i style={{ background: colors[provider] ?? "#77838d" }} aria-hidden="true" />
+            <b>{provider}</b>
+            <em>{fmt.format(tokens)}</em>
+          </span>
+        ))}
+      </div>
       <svg
         role="img"
+        aria-labelledby="indexed-activity-title indexed-activity-summary"
         aria-label={`Stacked token totals over ${days.length} days for ${providers.join(", ") || "no providers"}`}
         viewBox={`0 0 ${width} ${height}`}
       >
         <Group left={margin.left} top={margin.top}>
+          {yTicks.map((tick) => (
+            <g key={tick} className="chart-tick">
+              <line
+                x1={0}
+                x2={width - margin.left - margin.right}
+                y1={y(tick)}
+                y2={y(tick)}
+              />
+              <text x={-12} y={y(tick) + 3} textAnchor="end">
+                {fmt.format(tick)}
+              </text>
+            </g>
+          ))}
           <BarStack
             data={data}
             keys={providers}
@@ -208,27 +285,29 @@ function HistoryChart({ rows }: { rows: any[] }) {
           >
             {(stacks) =>
               stacks.map((stack) =>
-                stack.bars.map((bar) => (
-                  <rect
-                    key={`${stack.key}-${bar.index}`}
-                    x={bar.x}
-                    y={bar.y}
-                    width={bar.width}
-                    height={bar.height}
-                    fill={bar.color}
-                    rx="2"
-                  >
-                    <title>
-                      {stack.key}: {fmt.format(bar.bar.data[stack.key])} tokens
-                    </title>
-                  </rect>
-                )),
+                stack.bars
+                  .filter((bar) => bar.height > 0)
+                  .map((bar) => (
+                    <rect
+                      key={`${stack.key}-${bar.index}`}
+                      x={bar.x}
+                      y={bar.y}
+                      width={bar.width}
+                      height={bar.height}
+                      fill={bar.color}
+                      rx="2"
+                    >
+                      <title>
+                        {stack.key}: {fmt.format(Number(bar.bar.data[stack.key]))} tokens
+                      </title>
+                    </rect>
+                  )),
               )
             }
           </BarStack>
           {days.map(
             (d, i) =>
-              (i % Math.ceil(days.length / 7) === 0 ||
+              (i % labelStep === 0 ||
                 i === days.length - 1) && (
                 <text
                   key={d}
@@ -243,8 +322,8 @@ function HistoryChart({ rows }: { rows: any[] }) {
         </Group>
       </svg>
       <p className="sr-only">
-        Token volume by day. Use the sessions table for exact values and
-        supporting logs.
+        Token volume by day. {dailySummary || "No indexed token volume yet."}
+        Use the sessions table for exact values and supporting logs.
       </p>
     </figure>
   );
@@ -406,7 +485,10 @@ function Overview({
                     {row.coverage}
                   </Status>
                 </td>
-                <td className="share">
+                <td
+                  className="share"
+                  aria-label={`${Math.round(row.share * 100)}% of tokens`}
+                >
                   <i
                     style={{
                       width: `${Math.max(2, row.share * 100)}%`,
@@ -634,9 +716,19 @@ function Analyst({ compact = false }: { compact?: boolean }) {
     [input, setInput] = useState(""),
     [messages, setMessages] = useState<any[]>([]),
     [busy, setBusy] = useState(false);
-  const load = () => api<any>("/api/reports").then((r) => setReports(r.rows));
+  const load = async () => {
+    try {
+      const result = await api<any>("/api/reports");
+      setReports(result.rows);
+    } catch {
+      setReports([]);
+    }
+  };
   useEffect(() => {
     void load();
+    const refresh = () => void load();
+    window.addEventListener("analysis:complete", refresh);
+    return () => window.removeEventListener("analysis:complete", refresh);
   }, []);
   async function ask(text = input) {
     if (!text.trim() || busy) return;
@@ -770,17 +862,34 @@ function Analyst({ compact = false }: { compact?: boolean }) {
 function Settings() {
   const [health, setHealth] = useState<any>(null),
     [notice, setNotice] = useState("");
-  const load = () => api<any>("/api/health").then(setHealth);
-  useEffect(load, []);
+  const load = async () => {
+    try {
+      setHealth(await api<any>("/api/health"));
+    } catch (error) {
+      setNotice(`Health check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
   const mutate = async (path: string) => {
     setNotice("Starting…");
-    await api(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-    setNotice("Started. Progress will update in Health.");
-    setTimeout(load, 700);
+    try {
+      await api(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      if (path === "/api/analysis/run") {
+        setNotice("Analysis complete. The analyst brief is up to date.");
+        window.dispatchEvent(new Event("analysis:complete"));
+      } else {
+        setNotice("Started. Progress will update in Health.");
+      }
+      window.setTimeout(() => void load(), 700);
+    } catch (error) {
+      setNotice(`Could not start operation: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
   return (
     <div className="settings">
