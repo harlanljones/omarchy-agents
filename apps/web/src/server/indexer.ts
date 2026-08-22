@@ -15,6 +15,7 @@ const roots = [
   { provider: "opencode", path: `${home}/.local/share/opencode`, kinds: [".json", ".jsonl"] }
 ];
 const usageDir = process.env.AGENT_USAGE_DIR ?? `${home}/.local/state/omarchy/agents/usage`;
+const INDEXER_VERSION = "token-usage-v2";
 let active = false;
 let progress = { state: "idle", scanned: 0, indexed: 0, total: 0, current: "", startedAt: "", finishedAt: "", errors: 0 };
 
@@ -22,6 +23,57 @@ const id = (value: string) => createHash("sha256").update(value).digest("hex").s
 const iso = (value: unknown, fallback: string) => { const d = new Date(String(value ?? "")); return Number.isNaN(d.valueOf()) ? fallback : d.toISOString(); };
 const first = (...values: unknown[]) => values.find(v => typeof v === "string" && v.length) as string | undefined;
 const obj = (v: unknown): Record<string, any> => v && typeof v === "object" ? v as Record<string, any> : {};
+type TokenTotals = { input: number; output: number; cacheRead: number; cacheWrite: number };
+const tokenNumber = (value: unknown) => Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0;
+const tokenValue = (usage: Record<string, any>, keys: string[]) => {
+  for (const key of keys) if (usage[key] !== undefined && usage[key] !== null) return tokenNumber(usage[key]);
+  return 0;
+};
+const usageObject = (raw: any) => {
+  const message = obj(raw.message), payload = obj(raw.payload), data = obj(raw.data);
+  const candidates = [
+    raw.usage, message.usage, payload.usage, data.usage,
+    raw.token_usage, message.token_usage, payload.token_usage,
+    raw.tokens, message.tokens, payload.tokens,
+  ].map(obj);
+  return candidates.find((usage) => Object.keys(usage).some((key) => /token|usage|cache/i.test(key))) ?? null;
+};
+function usageTotals(raw: any): TokenTotals | null {
+  const usage = usageObject(raw);
+  if (!usage) return null;
+  const cacheCreation = usage.cache_creation && typeof usage.cache_creation === "object"
+    ? tokenNumber(usage.cache_creation.ephemeral_5m_input_tokens) + tokenNumber(usage.cache_creation.ephemeral_1h_input_tokens)
+    : 0;
+  const totals = {
+    input: tokenValue(usage, ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "prompt_token_count", "promptTokenCount"]),
+    output: tokenValue(usage, ["output_tokens", "outputTokens", "completion_tokens", "completionTokens", "completion_token_count", "completionTokenCount"]),
+    cacheRead: tokenValue(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cache_read_tokens", "cacheReadTokens"]),
+    cacheWrite: tokenValue(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_write_input_tokens", "cacheWriteInputTokens", "cache_creation_tokens", "cacheCreationTokens"]) || cacheCreation,
+  };
+  return totals.input || totals.output || totals.cacheRead || totals.cacheWrite ? totals : null;
+}
+function jsonlTokenTotals(raws: any[]): TokenTotals {
+  const snapshots = new Map<string, TokenTotals>();
+  raws.forEach((raw, index) => {
+    const totals = usageTotals(raw);
+    if (!totals) return;
+    const message = obj(raw.message), payload = obj(raw.payload);
+    const key = String(message.id ?? payload.id ?? raw.id ?? `line:${index}`);
+    const previous = snapshots.get(key);
+    snapshots.set(key, previous ? {
+      input: Math.max(previous.input, totals.input),
+      output: Math.max(previous.output, totals.output),
+      cacheRead: Math.max(previous.cacheRead, totals.cacheRead),
+      cacheWrite: Math.max(previous.cacheWrite, totals.cacheWrite),
+    } : totals);
+  });
+  return [...snapshots.values()].reduce((sum, totals) => ({
+    input: sum.input + totals.input,
+    output: sum.output + totals.output,
+    cacheRead: sum.cacheRead + totals.cacheRead,
+    cacheWrite: sum.cacheWrite + totals.cacheWrite,
+  }), { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+}
 
 function walk(root: string, extensions: string[], out: string[], limit = 100_000) {
   if (!existsSync(root) || out.length >= limit) return;
@@ -59,12 +111,13 @@ export function parseJsonl(provider: string, path: string, content: string): { s
   const meta = raws.map(obj).find(r => r.session_id || r.sessionId || r.cwd || r.model) ?? {};
   const sourceKey = `${provider}:${path}`;
   const sessionId = String(meta.session_id ?? meta.sessionId ?? meta.conversation_id ?? id(sourceKey));
+  const tokenTotals = jsonlTokenTotals(raws);
   const events = raws.map((r, i) => eventFrom(r, sessionId, i, path, fallbackTime)).filter(Boolean) as Event[];
   const startedAt = events[0]?.timestamp ?? fallbackTime;
   const endedAt = events.at(-1)?.timestamp ?? startedAt;
   const models = raws.map(r => first(r.model, r?.message?.model, r?.payload?.model)).filter(Boolean);
   const project = first(meta.cwd, meta.project, dirname(path).split("/").at(-1));
-  const session = NormalizedSession.parse({ id: sessionId, provider, model: models.at(-1) ?? null, project: project ?? null, title: events.find(e => e.kind === "prompt")?.text.slice(0, 120) ?? basename(path), startedAt, endedAt, sourcePath: path, sourceKey, errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "jsonl", parseableLines: raws.length, totalLines: lines.length } });
+  const session = NormalizedSession.parse({ id: sessionId, provider, model: models.at(-1) ?? null, project: project ?? null, title: events.find(e => e.kind === "prompt")?.text.slice(0, 120) ?? basename(path), startedAt, endedAt, sourcePath: path, sourceKey, tokenInput: tokenTotals.input, tokenOutput: tokenTotals.output, cacheRead: tokenTotals.cacheRead, cacheWrite: tokenTotals.cacheWrite, errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "jsonl", parseableLines: raws.length, totalLines: lines.length } });
   return { session, events };
 }
 
@@ -95,7 +148,7 @@ function indexOpenCode() {
   const path = `${home}/.local/share/opencode/opencode.db`;
   if (!existsSync(path)) return;
   const stat = statSync(path), checkpoint = db.query("SELECT size,mtime_ms FROM checkpoints WHERE source_path=?").get(path) as any;
-  if (checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs)) return;
+  if (checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs) && checkpoint?.status === INDEXER_VERSION) return;
   const source = new SourceDatabase(path, { readonly: true, strict: true });
   try {
     const sessions = source.query("SELECT id,directory,title,model,time_created,time_updated,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write FROM session ORDER BY time_created").all() as any[];
@@ -114,7 +167,7 @@ function indexOpenCode() {
       persist(NormalizedSession.parse({ id: raw.id, provider: "opencode", model: raw.model ?? null, project: raw.directory ?? null, title: raw.title ?? null, startedAt: new Date(Number(raw.time_created)).toISOString(), endedAt: new Date(Number(raw.time_updated)).toISOString(), sourcePath: path, sourceKey: `opencode:${raw.id}`, tokenInput: Number(raw.tokens_input ?? 0), tokenOutput: Number(raw.tokens_output ?? 0), cacheRead: Number(raw.tokens_cache_read ?? 0), cacheWrite: Number(raw.tokens_cache_write ?? 0), errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "opencode-sqlite" } }), events);
       progress.indexed++;
     }
-    db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status='ok',error=NULL").run(path, "opencode", stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), "ok");
+    db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(path, "opencode", stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), INDEXER_VERSION);
   } finally { source.close(); }
 }
 
@@ -133,10 +186,10 @@ export async function runIndex(options: { rebuild?: boolean } = {}) {
       progress.scanned++; progress.current = file.path; seen.add(file.path);
       try {
         const stat = statSync(file.path); const checkpoint = db.query("SELECT size,mtime_ms FROM checkpoints WHERE source_path=?").get(file.path) as any;
-        if (!options.rebuild && checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs)) continue;
+        if (!options.rebuild && checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs) && checkpoint?.status === INDEXER_VERSION) continue;
         if (extname(file.path) !== ".jsonl" || stat.size > 50_000_000) continue;
         const parsed = parseJsonl(file.provider, file.path, readFileSync(file.path, "utf8")); persist(parsed.session, parsed.events);
-        db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status='ok',error=NULL").run(file.path, file.provider, stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), "ok");
+        db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(file.path, file.provider, stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), INDEXER_VERSION);
         progress.indexed++;
       } catch (error) { progress.errors++; db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(file.path, file.provider, String(error), new Date().toISOString()); }
       if (progress.scanned % 50 === 0) await Bun.sleep(1);

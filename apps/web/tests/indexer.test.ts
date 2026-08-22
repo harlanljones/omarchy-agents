@@ -17,11 +17,13 @@ describe("JSONL source adapter", () => {
     writeFileSync(path,[
       JSON.stringify({session_id:"s1",cwd:"/work/project",timestamp:"2026-08-22T10:00:00Z",role:"user",content:"use OPENAI_API_KEY=sk-live-abcdefghijklmnop"}),
       "malformed",
-      JSON.stringify({session_id:"s1",timestamp:"2026-08-22T10:01:00Z",role:"assistant",content:"done"}),
+      JSON.stringify({session_id:"s1",timestamp:"2026-08-22T10:01:00Z",role:"assistant",content:"done",usage:{input_tokens:120,output_tokens:30,cache_read_input_tokens:40,cache_creation_input_tokens:10}}),
       JSON.stringify({session_id:"s1",timestamp:"2026-08-22T10:02:00Z",type:"tool_call",name:"read",content:{path:"a.ts"}})
     ].join("\n"));
     const result=parseJsonl("codex",path,readFile(path));
     expect(result.session.id).toBe("s1"); expect(result.events).toHaveLength(3);
+    expect(result.session.tokenInput).toBe(120); expect(result.session.tokenOutput).toBe(30);
+    expect(result.session.cacheRead).toBe(40); expect(result.session.cacheWrite).toBe(10);
     expect(result.events[0].text).not.toContain("sk-live"); expect(result.session.toolCount).toBe(1);
   });
 

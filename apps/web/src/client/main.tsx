@@ -26,6 +26,10 @@ type BoardRow = {
   coverage: string;
   updatedAt: string;
 };
+type HistorySeries = {
+  rows: any[];
+  source: "collector" | "indexed";
+};
 const colors: Record<string, string> = {
   claude: "#d97757",
   codex: "#10a37f",
@@ -135,11 +139,19 @@ function Button({
   );
 }
 
-function HistoryChart({ rows }: { rows: any[] }) {
+function HistoryChart({
+  rows,
+  source = "indexed",
+}: {
+  rows: any[];
+  source?: "collector" | "indexed";
+}) {
+  const activityName = source === "collector" ? "Token activity" : "Indexed activity";
+  const sourceName = source === "collector" ? "Collector totals" : "Indexed session totals";
   if (!rows.length)
     return (
       <div className="chart-empty">
-        <strong>Indexed activity</strong>
+        <strong>{activityName}</strong>
         <span>
           History will appear as transcript sessions are indexed. Rankings above
           remain available from usage collectors.
@@ -224,16 +236,16 @@ function HistoryChart({ rows }: { rows: any[] }) {
     <figure className="chart">
       <figcaption>
         <div className="chart-heading">
-          <strong id="indexed-activity-title">Indexed activity</strong>
+          <strong id="activity-title">{activityName}</strong>
           <span>
             {days.length
-              ? `${days[0]} — ${days.at(-1)}`
+              ? `${sourceName} · ${days[0]} — ${days.at(-1)}`
               : "Waiting for indexed sessions"}
           </span>
         </div>
-        <dl className="chart-summary" id="indexed-activity-summary">
+        <dl className="chart-summary" id="activity-summary">
           <div>
-            <dt>Indexed tokens</dt>
+            <dt>{source === "collector" ? "Reported tokens" : "Indexed tokens"}</dt>
             <dd>{fmt.format(totalIndexed)}</dd>
           </div>
           <div>
@@ -246,7 +258,7 @@ function HistoryChart({ rows }: { rows: any[] }) {
           </div>
         </dl>
       </figcaption>
-      <div className="chart-legend" role="list" aria-label="Providers in indexed activity">
+      <div className="chart-legend" role="list" aria-label={`Providers in ${activityName.toLowerCase()}`}>
         {providerTotals.map(({ provider, tokens }) => (
           <span role="listitem" key={provider}>
             <i style={{ background: colors[provider] ?? "#77838d" }} aria-hidden="true" />
@@ -257,7 +269,7 @@ function HistoryChart({ rows }: { rows: any[] }) {
       </div>
       <svg
         role="img"
-        aria-labelledby="indexed-activity-title indexed-activity-summary"
+        aria-labelledby="activity-title activity-summary"
         aria-label={`Stacked token totals over ${days.length} days for ${providers.join(", ") || "no providers"}`}
         viewBox={`0 0 ${width} ${height}`}
       >
@@ -322,8 +334,10 @@ function HistoryChart({ rows }: { rows: any[] }) {
         </Group>
       </svg>
       <p className="sr-only">
-        Token volume by day. {dailySummary || "No indexed token volume yet."}
-        Use the sessions table for exact values and supporting logs.
+        Token volume by day from {sourceName.toLowerCase()}. {dailySummary || "No token volume yet."}
+        {source === "collector"
+          ? "Use standings and source coverage for the reported provider totals."
+          : "Use the sessions table for exact indexed values and supporting logs."}
       </p>
     </figure>
   );
@@ -351,7 +365,7 @@ function Overview({
       freshness: [],
       index: { state: "idle" },
     }),
-    [series, setSeries] = useState<any[]>([]),
+    [series, setSeries] = useState<HistorySeries>({ rows: [], source: "indexed" }),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
   const updateUrl = (nextPeriod: string, nextProject: string) => {
@@ -382,7 +396,10 @@ function Overview({
     ])
       .then(([b, s]) => {
         setBoard(b);
-        setSeries(s.rows);
+        setSeries({
+          rows: s.rows,
+          source: s.source === "collector" ? "collector" : "indexed",
+        });
       })
       .catch((e) => { if (e.name !== "AbortError") setError(e.message); })
       .finally(() => setLoading(false));
@@ -515,7 +532,7 @@ function Overview({
           </tbody>
         </table>
       </section>
-      <HistoryChart rows={series} />
+      <HistoryChart rows={series.rows} source={series.source} />
       <section className="coverage">
         <h2>Source coverage</h2>
         {board.freshness?.map((x: any) => (
