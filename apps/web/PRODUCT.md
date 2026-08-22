@@ -12,7 +12,7 @@ Bun, React, Vite, Hono, SQLite, Zod, Visx, and TanStack Virtual. The application
 
 ## Users
 
-One private user, Harlan, reviewing personal AI-agent usage from the desktop or an authenticated remote browser. The core job is to understand where agent time and tokens went, inspect the underlying work, and decide what to improve.
+One private user reviewing personal AI-agent usage from the desktop or an authenticated remote browser. The core job is to understand where agent time and tokens went, inspect the underlying work, and decide what to improve.
 
 ## Product Purpose
 
@@ -34,7 +34,7 @@ The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, 
 - Secret-like content is redacted before persistence or streaming.
 - The analyst is read-only, bounded to eight tool iterations, and must cite evidence returned by tools.
 - Suggestions may be opened, accepted, or dismissed but never mutate agent files or settings.
-- Remote requests require a valid Cloudflare Access JWT for `harlanljones@gmail.com`; loopback use remains unauthenticated.
+- Remote requests require a valid Cloudflare Access JWT for the configured allow-listed email; loopback use remains unauthenticated.
 
 ## Brand Commitments
 

@@ -3,11 +3,13 @@ set -euo pipefail
 
 : "${CLOUDFLARE_API_TOKEN:?Set a scoped Cloudflare API token}"
 : "${CLOUDFLARE_ACCOUNT_ID:?Set the Cloudflare account ID}"
-: "${CLOUDFLARE_ZONE_ID:?Set the harlanljones.com zone ID}"
+: "${CLOUDFLARE_ZONE_ID:?Set your Cloudflare zone ID}"
+: "${DASHBOARD_HOSTNAME:?Set the dashboard hostname, e.g. agents.example.com}"
+: "${ACCESS_EMAIL:?Set the email allowed through Cloudflare Access}"
 
 api="https://api.cloudflare.com/client/v4"
 auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
-host="agents.harlanljones.com"
+host="$DASHBOARD_HOSTNAME"
 tunnel_name="omarchy-agents"
 
 request() { curl --fail-with-body --silent --show-error "${auth[@]}" "$@"; }
@@ -32,8 +34,8 @@ app_body=$(jq -nc --arg domain "$host" --arg idp "$otp_id" '{name:"Omarchy Agent
 if [[ -n $app_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id" --data "$app_body" >/dev/null
 else app_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" --data "$app_body" | jq -er '.result.id'); fi
 
-policy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" | jq -r '.result[] | select(.name=="Harlan only") | .id' | head -1)
-policy_body='{"name":"Harlan only","decision":"allow","precedence":1,"include":[{"email":{"email":"harlanljones@gmail.com"}}],"session_duration":"24h"}'
+policy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" | jq -r '.result[] | select(.name=="Dashboard user") | .id' | head -1)
+policy_body=$(jq -nc --arg email "$ACCESS_EMAIL" '{name:"Dashboard user",decision:"allow",precedence:1,include:[{email:{email:$email}}],session_duration:"24h"}')
 if [[ -n $policy_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies/$policy_id" --data "$policy_body" >/dev/null
 else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" --data "$policy_body" >/dev/null; fi
 

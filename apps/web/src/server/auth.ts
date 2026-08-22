@@ -1,24 +1,30 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Context, Next } from "hono";
 
-const remoteHost = "agents.harlanljones.com";
-const allowedEmail = (process.env.ACCESS_EMAIL ?? "harlanljones@gmail.com").toLowerCase();
+const remoteHost = process.env.DASHBOARD_HOSTNAME ?? "agents.example.com";
+const apiHost = process.env.API_HOSTNAME ?? "";
+const apiAudience = process.env.CLOUDFLARE_ACCESS_API_AUD ?? "";
+const serviceClientId = process.env.ACCESS_CLIENT_ID ?? "";
+const allowedEmail = (process.env.ACCESS_EMAIL ?? "").toLowerCase();
 const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export async function security(c: Context, next: Next) {
   const host = (c.req.header("host") ?? "").split(":")[0].toLowerCase();
-  if (!localHosts.has(host) && host !== remoteHost) return c.json({ error: "Host not allowed" }, 403);
+  if (!localHosts.has(host) && host !== remoteHost && host !== apiHost) return c.json({ error: "Host not allowed" }, 403);
   const origin = c.req.header("origin");
   if (origin) { try { if (new URL(origin).hostname !== host) return c.json({ error: "Origin not allowed" }, 403); } catch { return c.json({ error: "Origin not allowed" }, 403); } }
   if (!localHosts.has(host)) {
     const token = c.req.header("cf-access-jwt-assertion");
     const team = process.env.CLOUDFLARE_ACCESS_TEAM;
-    const audience = process.env.CLOUDFLARE_ACCESS_AUD;
+    const viaApiService = Boolean(apiHost) && host === apiHost && Boolean(apiAudience) && Boolean(serviceClientId);
+    const audience = viaApiService ? apiAudience : process.env.CLOUDFLARE_ACCESS_AUD;
     if (!token || !team || !audience) return c.json({ error: "Access authentication is not configured" }, 401);
     try {
       const jwks = createRemoteJWKSet(new URL(`https://${team}.cloudflareaccess.com/cdn-cgi/access/certs`));
       const { payload } = await jwtVerify(token, jwks, { issuer: `https://${team}.cloudflareaccess.com`, audience });
-      if (String(payload.email ?? "").toLowerCase() !== allowedEmail) return c.json({ error: "Identity not allowed" }, 403);
+      if (viaApiService) {
+        if (payload.common_name !== serviceClientId) return c.json({ error: "Service identity not allowed" }, 403);
+      } else if (String(payload.email ?? "").toLowerCase() !== allowedEmail) return c.json({ error: "Identity not allowed" }, 403);
     } catch { return c.json({ error: "Invalid Access token" }, 401); }
   }
   if (["POST", "PATCH", "PUT", "DELETE"].includes(c.req.method) && !c.req.header("content-type")?.toLowerCase().startsWith("application/json")) return c.json({ error: "JSON content type required" }, 415);

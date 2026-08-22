@@ -1,26 +1,44 @@
 # Omarchy Agents
 
-The source workspace for Harlan's local Omarchy Agents system.
+Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https://omarchy.org).
 
-## Apps
+- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
+- **Agent leaderboard** (`apps/omarchy-agent-leaderboard`) — Omarchy bar widget ranking token usage across every coding agent on the machine. Forked from `mustafaokur.agent-leaderboard` (MIT).
+- **Agent usage** (`apps/omarchy-agent-usage`) — fork of Omarchy's first-party Agents widget focused on per-provider usage and limits.
+- **Provider assets** (`packages/provider-assets`) — single source for provider marks; each app consumes them through a repository-relative symlink, and plugin builds dereference the link so deployed plugin directories stay self-contained.
 
-- `apps/web` — Bun, Hono, React, and SQLite dashboard served on `127.0.0.1:4317`.
-- `apps/omarchy-agent-leaderboard` — fork of `mustafaokur.agent-leaderboard`, focused on cross-provider rankings.
-- `apps/omarchy-agent-usage` — fork of Omarchy's first-party Agents widget, focused on per-provider usage and limits.
+## Requirements
 
-Provider marks live once in `packages/provider-assets`; each app consumes them through a repository-relative symlink. Plugin builds dereference that link so deployed Omarchy directories remain self-contained.
+- [Omarchy](https://omarchy.org) (Arch Linux + Hyprland) for the widgets
+- [Bun](https://bun.sh) 1.4+
+- [Ollama](https://ollama.com) for the local analyst
 
-## Commands
+## Getting started
 
 ```bash
 bun install
-bun run check
+bun run check        # test + typecheck + build across the workspace
 bun run dev --filter=@omarchy-agents/web
-bun run deploy:local
 ```
 
-`deploy:local` copies packaged plugins to `~/.config/omarchy/plugins/`. The web service runs directly from `apps/web`, so there is no second application copy under `~/.local/share`.
+The dashboard serves `http://127.0.0.1:4317`. It indexes local Claude, Codex, Cline, Antigravity, OpenCode, Fireworks, and usage-collector stores; secret-like content is redacted before anything is persisted.
 
-## Machine boundary
+To install the bar widgets locally:
 
-Chezmoi owns the systemd units, untracked environment files, Omarchy/Cline settings, usage collector overrides, and the after-apply hook that invokes this workspace. See `docs/chezmoi-boundary.md`.
+```bash
+bun run deploy:local   # builds plugins into ~/.config/omarchy/plugins/
+```
+
+## Remote access
+
+`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, self-hosted Access application, and an allow policy for one email. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
+
+Loopback traffic stays unauthenticated; remote requests require a valid Cloudflare Access JWT scoped to your team, audience, and allow-listed email.
+
+## Repository boundary
+
+Chezmoi owns the systemd units, untracked environment files, Omarchy/Cline settings, usage collector overrides, and the after-apply hook that invokes this workspace. Secrets never live in this repository — see [docs/chezmoi-boundary.md](docs/chezmoi-boundary.md).
+
+## License
+
+[MIT](LICENSE). The leaderboard app carries its upstream notices in [apps/omarchy-agent-leaderboard/LICENSE](apps/omarchy-agent-leaderboard/LICENSE).
