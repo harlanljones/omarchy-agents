@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "harlan.agent-leaderboard",
+  "name": "Agent Leaderboard",
+  "version": "1.3.0",
+  "author": "Harlan (cloned from Mustafa Okur)",
+  "license": "MIT",
+  "description": "Ranks token usage across every Omarchy coding agent on this machine.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Leaderboard",
+    "description": "One bar icon and one panel: a ranked board of Claude, Codex, Fireworks, and any other agent that writes a usage record.",
+    "category": "AI",
+    "aliases": ["leaderboard", "agent-leaderboard", "token-leaderboard"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "providers": {
+        "claude": { "enabled": true },
+        "codex": { "enabled": true },
+        "fireworks": { "enabled": true },
+        "grok": { "enabled": false },
+        "opencode": { "enabled": true }
+      },
+      "refreshIntervalSec": 900,
+      "period": "today"
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 30,
+        "max": 3600,
+        "step": 30,
+        "defaultValue": 900
+      },
+      {
+        "key": "period",
+        "type": "enum",
+        "label": "Default ranking window",
+        "options": ["today", "week", "all"],
+        "defaultValue": "today",
+        "description": "today is local midnight to now, week is the last seven local days, all is every token still in the usage records."
+      }
+    ]
+  },
+  "omarchy": {
+    "clonedFrom": "mustafaokur.agent-leaderboard"
+  }
+}

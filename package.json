@@ -1,0 +1,17 @@
+{
+  "name": "omarchy-agents",
+  "private": true,
+  "packageManager": "bun@1.4.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "check": "turbo run test typecheck build",
+    "deploy:local": "bash tooling/deploy-local.sh"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.6"
+  }
+}

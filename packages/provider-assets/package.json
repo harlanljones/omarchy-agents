@@ -1,0 +1,6 @@
+{
+  "name": "@omarchy-agents/provider-assets",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["assets"]
+}
