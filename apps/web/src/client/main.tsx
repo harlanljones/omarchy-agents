@@ -367,7 +367,8 @@ function Overview({
     }),
     [series, setSeries] = useState<HistorySeries>({ rows: [], source: "indexed" }),
     [error, setError] = useState(""),
-    [loading, setLoading] = useState(true);
+    [loading, setLoading] = useState(true),
+    [reload, setReload] = useState(0);
   const updateUrl = (nextPeriod: string, nextProject: string) => {
     const url = new URL(window.location.href);
     url.pathname = navPaths.overview;
@@ -395,17 +396,23 @@ function Overview({
       ),
     ])
       .then(([b, s]) => {
+        if (controller.signal.aborted) return;
         setBoard(b);
         setSeries({
           rows: s.rows,
           source: s.source === "collector" ? "collector" : "indexed",
         });
       })
-      .catch((e) => { if (e.name !== "AbortError") setError(e.message); })
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setBoard({ rows: [], total: 0, freshness: [], index: { state: "error" } });
+        setSeries({ rows: [], source: "indexed" });
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     updateUrl(period, project);
     return () => controller.abort();
-  }, [period, project]);
+  }, [period, project, reload]);
   return (
     <div className="overview">
       <section className="scorehead">
@@ -464,6 +471,7 @@ function Overview({
         <div className="notice error" role="alert">
           <strong>Metrics could not be loaded.</strong>
           <span>{error}</span>
+          <Button onClick={() => setReload((value) => value + 1)}>Retry</Button>
         </div>
       )}
       <section className="board" aria-labelledby="standings-title">
@@ -560,6 +568,7 @@ function Logs() {
     [error, setError] = useState(""),
     [eventsLoading, setEventsLoading] = useState(false),
     [eventsError, setEventsError] = useState(""),
+    [reload, setReload] = useState(0),
     [filters, setFilters] = useState({
       provider: "",
       project: "",
@@ -579,10 +588,15 @@ function Logs() {
         setData(result);
         setSelected((current: any) => result.rows.some((row: any) => row.id === current?.id) ? current : null);
       })
-      .catch((reason) => { if (reason.name !== "AbortError") { setError(reason.message); setData({ rows: [], total: 0 }); } })
-      .finally(() => setLoading(false));
+      .catch((reason) => {
+        if (reason.name === "AbortError") return;
+        setError(reason instanceof Error ? reason.message : String(reason));
+        setData({ rows: [], total: 0 });
+        setSelected(null);
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [filters.provider, filters.project, filters.errors]);
+  }, [filters.provider, filters.project, filters.errors, reload]);
   useEffect(() => {
     const controller = new AbortController();
     setEvents([]);
@@ -591,11 +605,11 @@ function Logs() {
       setEventsLoading(true);
       api<any>(`/api/sessions/${encodeURIComponent(selected.id)}/events`, { signal: controller.signal })
         .then((r) => setEvents(r.rows))
-        .catch((reason) => { if (reason.name !== "AbortError") setEventsError(reason.message); })
-        .finally(() => setEventsLoading(false));
+        .catch((reason) => { if (reason.name !== "AbortError") setEventsError(reason instanceof Error ? reason.message : String(reason)); })
+        .finally(() => { if (!controller.signal.aborted) setEventsLoading(false); });
     } else setEventsLoading(false);
     return () => controller.abort();
-  }, [selected]);
+  }, [selected, reload]);
   const virtual = useVirtualizer({
     count: data.rows.length,
     getScrollElement: () => parent.current,
@@ -647,7 +661,7 @@ function Logs() {
           <Button onClick={() => setFilters({ provider: "", project: "", errors: false })}>Clear filters</Button>
         )}
       </div>
-      {error && <div className="notice error" role="alert"><strong>Sessions could not be loaded.</strong><span>{error}</span></div>}
+      {error && <div className="notice error" role="alert"><strong>Sessions could not be loaded.</strong><span>{error}</span><Button onClick={() => setReload((value) => value + 1)}>Retry</Button></div>}
       <div className="ledger">
         <div
           className="sessionlist"
@@ -713,7 +727,7 @@ function Logs() {
             </article>
           ))}
           {eventsLoading && <div className="empty"><strong>Loading evidence…</strong><span>Reading redacted session events.</span></div>}
-          {eventsError && <div className="notice error" role="alert"><strong>Evidence could not be loaded.</strong><span>{eventsError}</span></div>}
+          {eventsError && <div className="notice error" role="alert"><strong>Evidence could not be loaded.</strong><span>{eventsError}</span><Button onClick={() => setReload((value) => value + 1)}>Retry</Button></div>}
           {!selected && !eventsLoading && (
             <div className="empty">
               <strong>{data.rows.length ? "Evidence opens here" : "Waiting for indexed evidence"}</strong>

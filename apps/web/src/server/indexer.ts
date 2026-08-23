@@ -29,6 +29,13 @@ const tokenValue = (usage: Record<string, any>, keys: string[]) => {
   for (const key of keys) if (usage[key] !== undefined && usage[key] !== null) return tokenNumber(usage[key]);
   return 0;
 };
+const epochIso = (value: unknown, fallback: string) => {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return fallback;
+  const milliseconds = Math.abs(numberValue) < 10_000_000_000 ? numberValue * 1000 : numberValue;
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.valueOf()) ? fallback : date.toISOString();
+};
 const usageObject = (raw: any) => {
   const message = obj(raw.message), payload = obj(raw.payload), data = obj(raw.data);
   const candidates = [
@@ -162,9 +169,10 @@ function indexOpenCode() {
         const text = typeof data.text === "string" ? data.text : data.output ? JSON.stringify(data.output) : data.error ? JSON.stringify(data.error) : data.state ? JSON.stringify(data.state) : "";
         if (!text) continue;
         const kind = type.includes("error") || data.state?.status === "error" ? "error" : type === "tool" ? (data.state?.status === "completed" ? "tool_result" : "tool_call") : type === "reasoning" ? "response" : role === "user" ? "prompt" : role === "assistant" ? "response" : "unknown";
-        events.push(LogEvent.parse({ id: part.id, sessionId: raw.id, ordinal: events.length, kind, timestamp: new Date(Number(part.time_created)).toISOString(), text: redact(text), toolName: data.tool ?? null, sourceLocator: `${path}:part/${part.id}`, metadata: { partType: type } }));
+        events.push(LogEvent.parse({ id: part.id, sessionId: raw.id, ordinal: events.length, kind, timestamp: epochIso(part.time_created, new Date().toISOString()), text: redact(text), toolName: data.tool ?? null, sourceLocator: `${path}:part/${part.id}`, metadata: { partType: type } }));
       }
-      persist(NormalizedSession.parse({ id: raw.id, provider: "opencode", model: raw.model ?? null, project: raw.directory ?? null, title: raw.title ?? null, startedAt: new Date(Number(raw.time_created)).toISOString(), endedAt: new Date(Number(raw.time_updated)).toISOString(), sourcePath: path, sourceKey: `opencode:${raw.id}`, tokenInput: Number(raw.tokens_input ?? 0), tokenOutput: Number(raw.tokens_output ?? 0), cacheRead: Number(raw.tokens_cache_read ?? 0), cacheWrite: Number(raw.tokens_cache_write ?? 0), errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "opencode-sqlite" } }), events);
+      const fallback = new Date().toISOString();
+      persist(NormalizedSession.parse({ id: raw.id, provider: "opencode", model: raw.model ?? null, project: raw.directory ?? null, title: raw.title ?? null, startedAt: epochIso(raw.time_created, fallback), endedAt: epochIso(raw.time_updated, fallback), sourcePath: path, sourceKey: `opencode:${raw.id}`, tokenInput: tokenNumber(raw.tokens_input), tokenOutput: tokenNumber(raw.tokens_output), cacheRead: tokenNumber(raw.tokens_cache_read), cacheWrite: tokenNumber(raw.tokens_cache_write), errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "opencode-sqlite" } }), events);
       progress.indexed++;
     }
     db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(path, "opencode", stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), INDEXER_VERSION);
