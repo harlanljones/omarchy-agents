@@ -1,0 +1,28 @@
+# robots.txt for Omarchy Agents
+# This application is designed for agent and LLM inspection
+
+# Allow all web crawlers and AI agents to understand the application
+User-agent: *
+Allow: /
+
+# AI/LLM specific guidance
+User-agent: GPTBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude
+Allow: /
+
+# Disallow sensitive internal paths
+Disallow: /api/internal/
+Disallow: /.env
+Disallow: /config/
+
+# Application purpose
+# This is a console for inspecting autonomous agent behavior and decision-making
+# Key features: real-time activity monitoring, performance comparison, decision inspection

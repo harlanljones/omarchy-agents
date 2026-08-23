@@ -1,0 +1,24 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "OmarchyAgents",
+  "name_for_human": "Omarchy Agents Console",
+  "description_for_model": "A console application for inspecting, comparing, and managing autonomous agent behavior. Provides real-time visibility into agent activity, performance metrics, decision-making processes, and usage analytics. Helps understand agent performance across different model providers and identify optimization opportunities.",
+  "description_for_human": "Inspect and manage autonomous agents with real-time activity visibility",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "/.well-known/openapi.json"
+  },
+  "logo_url": "/favicon.svg",
+  "contact_email": "support@omarchy.ai",
+  "legal_info_url": "https://omarchy.ai/legal",
+  "capabilities": [
+    "agent_inspection",
+    "performance_analytics",
+    "usage_tracking",
+    "model_comparison",
+    "real_time_monitoring"
+  ]
+}

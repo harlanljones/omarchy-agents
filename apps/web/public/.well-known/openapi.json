@@ -1,0 +1,184 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Omarchy Agents API",
+    "description": "API for inspecting and managing autonomous agent behavior, performance, and usage analytics",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Omarchy",
+      "url": "https://omarchy.ai"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://agents.omarchy.ai",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Check application health",
+        "description": "Returns the status of the Omarchy Agents console including indexing progress, model health, and database connectivity",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "Health check successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "index": {
+                      "type": "object",
+                      "description": "Indexing progress information"
+                    },
+                    "model": {
+                      "type": "object",
+                      "description": "LLM model health status"
+                    },
+                    "database": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/overview": {
+      "get": {
+        "summary": "Get agent performance overview",
+        "description": "Returns overview of agent performance rankings and usage statistics for the specified time period",
+        "tags": ["Analytics"],
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "description": "Time period to analyze: today, week, month, or all",
+            "schema": {
+              "type": "string",
+              "enum": ["today", "week", "month", "all"],
+              "default": "week"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Optional project filter",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Overview data retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Agent performance rankings and statistics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/limits": {
+      "get": {
+        "summary": "Get usage limits and board",
+        "description": "Returns the limits dashboard with usage records, advisories, and model provider information. Admin access required.",
+        "tags": ["Admin", "Usage"],
+        "security": [
+          {
+            "admin_auth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Limits dashboard data"
+          },
+          "403": {
+            "description": "Admin access required"
+          }
+        }
+      }
+    },
+    "/chat": {
+      "post": {
+        "summary": "Chat with agent analyst",
+        "description": "Stream questions and insights about agent behavior. Uses LLM to analyze agent activity and provide recommendations.",
+        "tags": ["Analysis"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "description": "Question about agent performance or behavior"
+                  },
+                  "context": {
+                    "type": "object",
+                    "description": "Additional context about agents or time period"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stream of analysis responses"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "System health and status endpoints"
+    },
+    {
+      "name": "Analytics",
+      "description": "Agent performance and usage analytics"
+    },
+    {
+      "name": "Admin",
+      "description": "Administrative endpoints (requires authentication)"
+    },
+    {
+      "name": "Analysis",
+      "description": "LLM-powered analysis endpoints"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "admin_auth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Admin authentication token"
+      }
+    }
+  }
+}
