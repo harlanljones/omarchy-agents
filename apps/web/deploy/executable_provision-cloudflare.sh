@@ -83,21 +83,24 @@ else
   else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" --data "$svc_policy_body" >/dev/null; fi
 fi
 
-admin_auds=()
-for admin_path in /limits /api/limits; do
-  admin_domain="$host$admin_path"
-  admin_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg domain "$admin_domain" '.result[] | select(.domain==$domain) | .id' | head -1)
-  admin_body=$(jq -nc --arg domain "$admin_domain" --arg idp "$otp_id" '{name:"Omarchy Agents Admin",domain:$domain,type:"self_hosted",session_duration:"24h",auto_redirect_to_identity:true,allowed_idps:[$idp]}')
-  if [[ -n $admin_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id" --data "$admin_body" >/dev/null
-  else admin_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" --data "$admin_body" | jq -er '.result.id'); fi
+legacy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg domain "$host/api/limits" '.result[] | select(.domain==$domain) | .id' | head -1)
+if [[ -n $legacy_id ]]; then
+  request -X DELETE "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$legacy_id" >/dev/null
+  printf 'Removed the legacy %s/api/limits Access app; the portal now uses one app for page and API.\n' "$host"
+fi
 
-  admin_policy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies" | jq -r '.result[] | select(.name=="Portal user") | .id' | head -1)
-  admin_policy_body=$(jq -nc --arg email "$ACCESS_EMAIL" '{name:"Portal user",decision:"allow",precedence:1,include:[{email:{email:$email}}],session_duration:"24h"}')
-  if [[ -n $admin_policy_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies/$admin_policy_id" --data "$admin_policy_body" >/dev/null
-  else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies" --data "$admin_policy_body" >/dev/null; fi
+admin_domain="$host/limits"
+admin_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg domain "$admin_domain" '.result[] | select(.domain==$domain) | .id' | head -1)
+admin_body=$(jq -nc --arg domain "$admin_domain" --arg idp "$otp_id" '{name:"Omarchy Agents Admin",domain:$admin_domain,type:"self_hosted",session_duration:"24h",auto_redirect_to_identity:true,allowed_idps:[$idp]}')
+if [[ -n $admin_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id" --data "$admin_body" >/dev/null
+else admin_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" --data "$admin_body" | jq -er '.result.id'); fi
 
-  admin_auds+=("$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id" | jq -er '.result.aud')")
-done
+admin_policy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies" | jq -r '.result[] | select(.name=="Portal user") | .id' | head -1)
+admin_policy_body=$(jq -nc --arg email "$ACCESS_EMAIL" '{name:"Portal user",decision:"allow",precedence:1,include:[{email:{email:$email}}],session_duration:"24h"}')
+if [[ -n $admin_policy_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies/$admin_policy_id" --data "$admin_policy_body" >/dev/null
+else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies" --data "$admin_policy_body" >/dev/null; fi
+
+admin_aud=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id" | jq -er '.result.aud')
 
 token=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$tunnel_id/token" | jq -er '.result')
 aud=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id" | jq -er '.result.aud')
@@ -110,7 +113,7 @@ if grep -q '^CLOUDFLARE_ACCESS_AUD=' "$config_dir/dashboard.env"; then
 else
   printf 'CLOUDFLARE_ACCESS_AUD=%s\n' "$aud" >>"$config_dir/dashboard.env"
 fi
-admin_aud_list=$(IFS=,; echo "${admin_auds[*]}")
+admin_aud_list="$admin_aud"
 if grep -q '^CLOUDFLARE_ACCESS_ADMIN_AUD=' "$config_dir/dashboard.env"; then
   sed -i "s|^CLOUDFLARE_ACCESS_ADMIN_AUD=.*|CLOUDFLARE_ACCESS_ADMIN_AUD=$admin_aud_list|" "$config_dir/dashboard.env"
 else

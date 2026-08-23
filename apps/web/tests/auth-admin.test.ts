@@ -41,33 +41,33 @@ const get = (path: string, host: string, token?: string) =>
 
 describe("limits portal boundary", () => {
   test("rejects loopback without a token", async () =>
-    expect((await get("/api/limits/board", "127.0.0.1")).status).toBe(401));
+    expect((await get("/limits/api/board", "127.0.0.1")).status).toBe(401));
 
   test("accepts a first-configured admin audience on loopback", async () => {
-    const response = await get("/api/limits/board", "127.0.0.1", await signToken("aud-admin-a"));
+    const response = await get("/limits/api/board", "127.0.0.1", await signToken("aud-admin-a"));
     expect(response.status).toBe(200);
   });
 
   test("accepts the second configured admin audience", async () => {
-    const response = await get("/api/limits/board", "127.0.0.1", await signToken("aud-admin-b"));
+    const response = await get("/limits/api/board", "127.0.0.1", await signToken("aud-admin-b"));
     expect(response.status).toBe(200);
   });
 
   test("rejects a token minted for the main dashboard audience", async () =>
-    expect((await get("/api/limits/board", "127.0.0.1", await signToken("aud-main"))).status).toBe(401));
+    expect((await get("/limits/api/board", "127.0.0.1", await signToken("aud-main"))).status).toBe(401));
 
   test("rejects an unknown audience", async () =>
-    expect((await get("/api/limits/board", "127.0.0.1", await signToken("aud-other"))).status).toBe(401));
+    expect((await get("/limits/api/board", "127.0.0.1", await signToken("aud-other"))).status).toBe(401));
 
   test("rejects a valid token for a different email", async () =>
-    expect((await get("/api/limits/board", "127.0.0.1", await signToken("aud-admin-a", "intruder@example.com"))).status).toBe(403));
+    expect((await get("/limits/api/board", "127.0.0.1", await signToken("aud-admin-a", "intruder@example.com"))).status).toBe(403));
 
   test("blocks the service-origin path to the portal", async () => {
     setEnv("API_HOSTNAME", "api.example.com");
     setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
     setEnv("ACCESS_CLIENT_ID", "svc.client");
     try {
-      const response = await get("/api/limits/board", "api.example.com", await signToken("aud-admin-a"));
+      const response = await get("/limits/api/board", "api.example.com", await signToken("aud-admin-a"));
       expect(response.status).toBe(403);
     } finally {
       for (const key of ["API_HOSTNAME", "CLOUDFLARE_ACCESS_API_AUD", "ACCESS_CLIENT_ID"]) delete process.env[key];
@@ -78,7 +78,7 @@ describe("limits portal boundary", () => {
     const saved = process.env.CLOUDFLARE_ACCESS_ADMIN_AUD;
     delete process.env.CLOUDFLARE_ACCESS_ADMIN_AUD;
     try {
-      const response = await get("/api/limits/board", "127.0.0.1", await signToken("aud-admin-a"));
+      const response = await get("/limits/api/board", "127.0.0.1", await signToken("aud-admin-a"));
       expect(response.status).toBe(401);
     } finally { process.env.CLOUDFLARE_ACCESS_ADMIN_AUD = saved; }
   });

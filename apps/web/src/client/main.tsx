@@ -55,6 +55,12 @@ const duration = (ms: number) => {
 };
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, init);
+  if (!(response.headers.get("content-type") ?? "").includes("application/json"))
+    throw new Error(
+      response.ok
+        ? "Cloudflare Access returned its login page instead of JSON — your portal session expired"
+        : `Request failed (${response.status})`,
+    );
   if (!response.ok)
     throw new Error(
       (await response.json().catch(() => ({}))).error ??
@@ -1134,10 +1140,10 @@ function Limits() {
   }, []);
   useEffect(() => {
     setError("");
-    api<LimitsBoard>("/api/limits/board")
+    api<LimitsBoard>("/limits/api/board")
       .then(setBoard)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-    api<{ entries: PricingEntry[]; overrideError: string | null }>("/api/limits/pricing")
+    api<{ entries: PricingEntry[]; overrideError: string | null }>("/limits/api/pricing")
       .then((p) => {
         setPricing(p.entries);
         setOverrideError(p.overrideError ?? "");
@@ -1147,7 +1153,7 @@ function Limits() {
   useEffect(() => {
     const query = task ? `?task=${task}` : "";
     api<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] }>(
-      `/api/limits/advice${query}`,
+      `/limits/api/advice${query}`,
     )
       .then(setAdvice)
       .catch(() => setAdvice(null));
@@ -1190,8 +1196,7 @@ function Limits() {
       </header>
       {error && (
         <p className="notice error" role="alert">
-          {error} Open the dashboard through its Access-protected hostname —
-          this portal demands Cloudflare authentication on every host.
+          {error} Reload the page to sign in through Cloudflare Access.
         </p>
       )}
       {!error && (

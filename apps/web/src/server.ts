@@ -13,8 +13,6 @@ import { UsageRecordV1 } from "./shared/schemas";
 const app = new Hono(); app.use("*", security);
 app.use("/limits", requireAdmin);
 app.use("/limits/*", requireAdmin);
-app.use("/api/limits", requireAdmin);
-app.use("/api/limits/*", requireAdmin);
 export function collectorTimeseries(days: number) {
   const records = (db.query("SELECT record_json FROM usage_records").all() as any[])
     .flatMap((row) => {
@@ -55,8 +53,8 @@ app.get("/api/overview", c => {
   }
   return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: ["claude", "codex", "opencode"].includes(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
 });
-app.get("/api/limits/board", c => c.json(limitsBoard()));
-app.get("/api/limits/advice", c => {
+app.get("/limits/api/board", c => c.json(limitsBoard()));
+app.get("/limits/api/advice", c => {
   const task = c.req.query("task") ?? "";
   const explicit = { input: Number(c.req.query("input")), output: Number(c.req.query("output")), cacheRead: Number(c.req.query("cache")) };
   let mix = null;
@@ -65,7 +63,7 @@ app.get("/api/limits/advice", c => {
   else if (task || c.req.query("input")) return c.json({ error: "task must be small, medium, or large, or pass input/output/cache token counts" }, 400);
   return c.json(advise(loadUsageRecords(), mix));
 });
-app.get("/api/limits/pricing", c => c.json({ asOfNote: "Reference API rates; override via ~/.config/omarchy-agents/pricing.json", overrideError: pricingOverrideError(), entries: effectivePricingTable() }));
+app.get("/limits/api/pricing", c => c.json({ asOfNote: "Reference API rates; override via ~/.config/omarchy-agents/pricing.json", overrideError: pricingOverrideError(), entries: effectivePricingTable() }));
 app.get("/api/filter-options", c => c.json({
   projects: (db.query("SELECT DISTINCT project FROM sessions WHERE project IS NOT NULL AND trim(project) <> '' ORDER BY project COLLATE NOCASE").all() as Array<{ project: string }>).map(row => row.project),
   models: (db.query("SELECT DISTINCT model FROM sessions WHERE model IS NOT NULL AND trim(model) <> '' ORDER BY model COLLATE NOCASE").all() as Array<{ model: string }>).map(row => row.model),

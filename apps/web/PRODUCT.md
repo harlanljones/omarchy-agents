@@ -35,7 +35,7 @@ The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, 
 - The analyst is read-only, bounded to eight tool iterations, and must cite evidence returned by tools.
 - Suggestions may be opened, accepted, or dismissed but never mutate agent files or settings.
 - Remote requests require a valid Cloudflare Access JWT for the configured allow-listed email; loopback use remains unauthenticated.
-- The limits portal is a separate, stricter trust tier: it is gated by dedicated path-scoped Access applications, requires a valid JWT everywhere including loopback, and fails closed when unconfigured.
+- The limits portal is a separate, stricter trust tier: it is gated by a dedicated path-scoped Access application covering both the page and its API, requires a valid JWT everywhere including loopback, and fails closed when unconfigured.
 
 ## Brand Commitments
 

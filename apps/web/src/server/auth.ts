@@ -36,7 +36,7 @@ export function _setAccessVerifierForTests(verify: ((token: string, issuer: stri
 }
 
 export const isAdminPath = (path: string) =>
-  path === "/limits" || path.startsWith("/limits/") || path === "/api/limits" || path.startsWith("/api/limits/");
+  path === "/limits" || path.startsWith("/limits/");
 
 const isServiceOrigin = (host: string) => host !== remoteHost() && Boolean(apiHost()) && host === apiHost() && Boolean(apiAudience()) && Boolean(serviceClientId());
 

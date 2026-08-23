@@ -48,7 +48,7 @@ bun run deploy:local   # builds plugins into ~/.config/omarchy/plugins/
 
 ## Remote access
 
-`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, a self-hosted Access application, and an allow policy for one email — plus two additional path-scoped admin Access applications (`/limits` and `/api/limits`) that gate the limits portal. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
+`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, a self-hosted Access application, and an allow policy for one email — plus one path-scoped admin Access application (`/limits`, covering the portal page and its `/limits/api/*` endpoints) that gates the limits portal. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
 
 Loopback traffic stays unauthenticated; remote requests require a valid Cloudflare Access JWT scoped to your team, audience, and allow-listed email.
 

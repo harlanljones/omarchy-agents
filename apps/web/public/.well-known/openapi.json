@@ -101,7 +101,7 @@
         }
       }
     },
-    "/api/limits": {
+    "/limits/api": {
       "get": {
         "summary": "Get usage limits and board",
         "description": "Returns the limits dashboard with usage records, advisories, and model provider information. Admin access required.",
