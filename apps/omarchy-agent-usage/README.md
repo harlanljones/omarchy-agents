@@ -54,6 +54,7 @@ light surfaces — and the bar glyph stands in when there is none.
 |---|---|---|
 | `claude` | Anthropic's OAuth usage endpoint (5-hour session + 7-day weekly) | `~/.claude/projects` transcripts, opencode sessions on an Anthropic provider, plus `stats-cache.json` and `history.jsonl` as fallback |
 | `codex` | The Codex app-server RPC | native Codex CLI session files (plus pi and opencode sessions) |
+| `cursor` | Optional manual included-usage percentage from `cursor.com/dashboard` (see below) | Cursor chat stores plus real token totals from the `statusLine` hook |
 | `fireworks` | Estimated prepaid balance: configured funding minus rated account costs | Fireworks billing API, grouped by day and model for the last 30 days |
 | `cline` | Estimated from priced transcripts, or real dashboard figures via `/usage` (see below) | `~/.cline/data/sessions` transcripts (per-message token metrics and model attribution) |
 | `opencode` | Real Go Rolling/Weekly/Monthly figures via the Go scraper (see below), plus optional provider-scoped token quotas via `OPENCODE_USAGE_LIMITS` | opencode's local session storage (per-provider/model input/output/cache token totals) |
@@ -99,6 +100,24 @@ configured with `OPENCODE_USAGE_LIMITS` or `OPENCODE_USAGE_LIMITS_FILE`:
 
 The collector reports used tokens and reset-aware percentages for configured
 windows; providers without a configured quota remain token-only.
+
+### Cursor included usage
+
+Cursor's local chat database has prompt and session history, but no token
+counts or quota endpoint. The Cursor collector therefore combines chat-store
+history with real per-call token totals written by the `statusLine` hook. Only
+interactive sessions recorded after the hook is installed contribute token
+data; older chats remain useful for prompt and session counts.
+
+For the monthly included-usage meter, read the percentage from
+`https://cursor.com/dashboard` and record it with:
+
+```sh
+omarchy-cursor-usage-override --included 42
+```
+
+Pass `--resets 12d` when a reset countdown is known. The panel keeps the
+manual value for 24 hours, then drops it rather than showing stale quota data.
 
 ### OpenCode Go limits
 
