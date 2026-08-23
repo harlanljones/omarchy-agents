@@ -82,7 +82,10 @@ Panel {
   }
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
-  function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+  function alpha(c, a) {
+    var col = Qt.color(c)
+    return Qt.rgba(col.r, col.g, col.b, a)
+  }
 
   function selectRow(index) {
     if (standings.length === 0) return
@@ -685,7 +688,7 @@ Panel {
           anchors.bottom: parent.bottom
           height: parent.height * root.clamp((dayCol.day ? dayCol.day.total : 0) / Math.max(1, dayCol.peak), 0, 1)
           radius: Style.space(3)
-          color: dayCol.today ? root.alpha(root.accent, 0.18) : root.track
+          color: root.track
 
           Column {
             anchors.fill: parent
