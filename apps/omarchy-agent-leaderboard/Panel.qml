@@ -16,7 +16,7 @@ Panel {
   readonly property color accent: Color.accent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property color surface: Color.popups.background
-  readonly property color track: root.alpha(root.accent, 0.14)
+  readonly property color track: root.alpha(root.accent, 0.18)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property url trophyMark: Qt.resolvedUrl("assets/trophy.svg")
 
@@ -147,14 +147,14 @@ Panel {
   function agentAccent(id) {
     if (id === "cline") return "#6BCB77"
     if (id === "antigravity" || id === "agy") return "#4285F4"
-    if (id === "claude") return "#D97757"
-    if (id === "cursor") return "#F54E00"
-    if (id === "fireworks") return "#FF6B22"
-    if (id === "hermes") return "#C9A227"
-    if (id === "codex") return "#10A37F"
-    if (id === "opencode") return "#C77DFF"
-    if (id === "grok") return "#E8C468"
-    var palette = ["#7C9CFF", "#6BCB77", "#FFD93D", "#FF6B6B", "#C77DFF", "#4ECDC4"]
+    if (id === "claude") return "#E07A5F"
+    if (id === "cursor") return "#EF4444"
+    if (id === "fireworks") return "#FBBF24"
+    if (id === "hermes") return "#EC4899"
+    if (id === "codex") return "#2DD4BF"
+    if (id === "opencode") return "#A78BFA"
+    if (id === "grok") return "#E6EAF2"
+    var palette = ["#7C9CFF", "#6BCB77", "#FBBF24", "#EF4444", "#A78BFA", "#2DD4BF"]
     var hash = 0
     var key = String(id || "")
     for (var i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
@@ -550,7 +550,7 @@ Panel {
       anchors.bottom: parent.bottom
       width: parent.width * root.clamp(rankRow.row ? rankRow.row.bar : 0, 0, 1)
       radius: Style.cornerRadius
-      color: root.alpha(root.agentAccent(rankRow.row ? (root.isModelView && rankRow.row.modelProviderId ? rankRow.row.modelProviderId : rankRow.row.providerId) : ""), 0.20)
+      color: root.alpha(root.agentAccent(rankRow.row ? (root.isModelView && rankRow.row.modelProviderId ? rankRow.row.modelProviderId : rankRow.row.providerId) : ""), 0.26)
 
       Behavior on width {
         NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
@@ -694,8 +694,8 @@ Panel {
                 required property var modelData
                 required property int index
                 width: dayTrack.width
-                height: dayTrack.height * (modelData.tokens / Math.max(1, dayCol.day.total))
-                color: root.alpha(root.agentAccent(modelData.providerId), dayCol.today ? 0.92 : 0.65)
+                height: Math.max(0, dayTrack.height * (modelData.tokens / Math.max(1, dayCol.day.total)) - (index > 0 ? 1 : 0))
+                color: root.alpha(root.agentAccent(modelData.providerId), dayCol.today ? 1.0 : 0.78)
               }
             }
           }

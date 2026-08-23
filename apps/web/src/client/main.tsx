@@ -5,14 +5,16 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Group } from "@visx/group";
 import { BarStack } from "@visx/shape";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
+import type { AdviceRow, AdviceVerdict, LimitsBoard, LimitWindowView, PricingEntry } from "../shared/schemas";
 import "./styles.css";
 
-type Nav = "overview" | "logs" | "analyst" | "settings";
+type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
 const navPaths: Record<Nav, string> = {
   overview: "/overview",
   logs: "/logs",
   analyst: "/analyst",
   settings: "/settings",
+  limits: "/limits",
 };
 const navFromPath = (pathname = window.location.pathname): Nav =>
   (Object.entries(navPaths).find(([, path]) => path === pathname)?.[0] as Nav) ??
@@ -42,6 +44,15 @@ const fmt = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
+const duration = (ms: number) => {
+  if (!(ms > 0)) return "now";
+  const minutes = Math.floor(ms / 60000),
+    hours = Math.floor(minutes / 60),
+    days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return `${Math.max(1, minutes)}m`;
+};
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, init);
   if (!response.ok)
@@ -107,6 +118,13 @@ function NavIcon({ id }: { id: Nav }) {
         <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
       </>
     ),
+    limits: (
+      <>
+        <path d="M4 20a8 8 0 1 1 16 0" />
+        <path d="M12 20L15.5 9.5" />
+        <circle cx="12" cy="20" r="1.6" />
+      </>
+    ),
   };
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -139,12 +157,118 @@ function Button({
   );
 }
 
+function Sk({ w, h = 12 }: { w: number; h?: number }) {
+  return <i className="sk" style={{ width: w, height: h }} aria-hidden="true" />;
+}
+function StandingsSkeleton() {
+  const shares = [78, 46, 30, 18, 10, 6];
+  return (
+    <>
+      {shares.map((share, i) => (
+        <tr className="standing" key={i} aria-hidden="true">
+          <td className="rank"><Sk w={20} /></td>
+          <th scope="row" className="provider">
+            <i className="sk sk-tile" />
+            <Sk w={104 - i * 6} h={11} />
+          </th>
+          <td className="tokens"><Sk w={52 - i * 4} /></td>
+          <td><i className="sk sk-pill" /></td>
+          <td className="share"><i className="sk-fill" style={{ width: `${share}%` }} /></td>
+        </tr>
+      ))}
+    </>
+  );
+}
+function ChartSkeleton() {
+  return (
+    <div className="chart sk-chart" aria-hidden="true">
+      <div className="chart-heading">
+        <Sk w={148} h={14} />
+        <Sk w={188} h={10} />
+      </div>
+      <div className="chart-summary">
+        {[92, 64, 108].map((w, i) => (
+          <div key={i}>
+            <Sk w={78} h={9} />
+            <Sk w={w} h={13} />
+          </div>
+        ))}
+      </div>
+      <div className="sk-plot">
+        {[0, 25, 50, 75].map((t) => (
+          <i key={t} style={{ top: `${t}%` }} />
+        ))}
+      </div>
+      <div className="sk-axis">
+        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          <Sk key={i} w={26} h={8} />
+        ))}
+      </div>
+    </div>
+  );
+}
+function CoverageSkeleton() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <div key={i} aria-hidden="true">
+          <i className="sk sk-tile" />
+          <Sk w={84 - i * 8} h={11} />
+          <i className="sk sk-pill" />
+          <Sk w={128 - i * 14} h={10} />
+        </div>
+      ))}
+    </>
+  );
+}
+function SessionListSkeleton() {
+  const titles = [152, 178, 128, 164, 112, 146, 136, 172];
+  const metas = [[196, 92], [158, 78], [214, 106], [134, 70], [176, 88], [204, 98], [142, 74], [186, 94]];
+  return (
+    <>
+      {titles.map((w, i) => (
+        <div className="session sk-session" key={i} aria-hidden="true">
+          <span>
+            <i className="sk sk-tile" />
+            <Sk w={w} h={11} />
+          </span>
+          <i className="sk sk-meta" style={{ width: metas[i][0] }} />
+          <i className="sk sk-meta" style={{ width: metas[i][1] }} />
+        </div>
+      ))}
+    </>
+  );
+}
+function EventsSkeleton() {
+  const lines = [
+    ["88%", "62%"],
+    ["76%", "44%"],
+    ["84%", "56%"],
+  ];
+  return (
+    <>
+      {lines.map(([a, b], i) => (
+        <article className="event sk-event" key={i} aria-hidden="true">
+          <div>
+            <Sk w={54} h={9} />
+            <Sk w={60} h={9} />
+          </div>
+          <i className="sk sk-line" style={{ width: a }} />
+          <i className="sk sk-line" style={{ width: b }} />
+        </article>
+      ))}
+    </>
+  );
+}
+
 function HistoryChart({
   rows,
   source = "indexed",
+  updating = false,
 }: {
   rows: any[];
   source?: "collector" | "indexed";
+  updating?: boolean;
 }) {
   const activityName = source === "collector" ? "Token activity" : "Indexed activity";
   const sourceName = source === "collector" ? "Collector totals" : "Indexed session totals";
@@ -233,14 +357,16 @@ function HistoryChart({
     .map((day) => `${day.day}: ${fmt.format(day.tokens)} tokens`)
     .join("; ");
   return (
-    <figure className="chart">
+    <figure className={`chart ${updating ? "is-updating" : ""}`}>
       <figcaption>
         <div className="chart-heading">
           <strong id="activity-title">{activityName}</strong>
           <span>
-            {days.length
-              ? `${sourceName} · ${days[0]} — ${days.at(-1)}`
-              : "Waiting for indexed sessions"}
+            {updating
+              ? `Updating ${activityName.toLowerCase()}…`
+              : days.length
+                ? `${sourceName} · ${days[0]} — ${days.at(-1)}`
+                : "Waiting for indexed sessions"}
           </span>
         </div>
         <dl className="chart-summary" id="activity-summary">
@@ -367,7 +493,8 @@ function Overview({
     }),
     [series, setSeries] = useState<HistorySeries>({ rows: [], source: "indexed" }),
     [error, setError] = useState(""),
-    [loading, setLoading] = useState(true),
+    [loadingBoard, setLoadingBoard] = useState(true),
+    [loadingSeries, setLoadingSeries] = useState(true),
     [reload, setReload] = useState(0);
   const updateUrl = (nextPeriod: string, nextProject: string) => {
     const url = new URL(window.location.href);
@@ -386,30 +513,35 @@ function Overview({
   useEffect(() => {
     const controller = new AbortController();
     setError("");
-    setLoading(true);
+    setLoadingBoard(true);
+    setLoadingSeries(true);
     const projectQuery = project ? `&project=${encodeURIComponent(project)}` : "";
-    Promise.all([
-      api<any>(`/api/overview?period=${period}${projectQuery}`, { signal: controller.signal }),
-      api<any>(
-        `/api/timeseries?days=${period === "today" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365}${projectQuery}`,
-        { signal: controller.signal },
-      ),
-    ])
-      .then(([b, s]) => {
-        if (controller.signal.aborted) return;
-        setBoard(b);
-        setSeries({
+    api<any>(`/api/overview?period=${period}${projectQuery}`, { signal: controller.signal })
+      .then((b) => {
+        if (!controller.signal.aborted) setBoard(b);
+      })
+      .catch((e) => {
+        if (e.name === "AbortError") return;
+        setBoard({ rows: [], total: 0, freshness: [], index: { state: "error" } });
+        setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoadingBoard(false); });
+    api<any>(
+      `/api/timeseries?days=${period === "today" ? 1 : period === "week" ? 7 : period === "month" ? 30 : 365}${projectQuery}`,
+      { signal: controller.signal },
+    )
+      .then((s) => {
+        if (!controller.signal.aborted) setSeries({
           rows: s.rows,
           source: s.source === "collector" ? "collector" : "indexed",
         });
       })
       .catch((e) => {
         if (e.name === "AbortError") return;
-        setBoard({ rows: [], total: 0, freshness: [], index: { state: "error" } });
         setSeries({ rows: [], source: "indexed" });
-        setError(e instanceof Error ? e.message : String(e));
+        setError((current) => current || (e instanceof Error ? e.message : String(e)));
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      .finally(() => { if (!controller.signal.aborted) setLoadingSeries(false); });
     updateUrl(period, project);
     return () => controller.abort();
   }, [period, project, reload]);
@@ -419,15 +551,25 @@ function Overview({
         <div>
           <h1>Omarchy Agents</h1>
           <p>
-            {loading
-              ? "Loading collector metrics…"
-              : `${fmt.format(board.total)} tokens across ${board.rows.length} active providers`}
+            {loadingBoard && !board.rows.length
+              ? (
+                <>
+                  <i className="sk sk-hero" aria-hidden="true" />
+                  <span className="sr-only">Loading collector metrics…</span>
+                </>
+              )
+              : loadingBoard
+                ? "Updating standings…"
+                : `${fmt.format(board.total)} tokens across ${board.rows.length} active providers`}
           </p>
         </div>
         <div className="health">
           <Status tone={board.index?.state === "ready" ? "ok" : "warn"}>
             Index {board.index?.state}
           </Status>
+          <a className="button secondary limits-link" href={navPaths.limits}>
+            Limits portal
+          </a>
           <button
             className="rail-toggle"
             onClick={openRail}
@@ -485,7 +627,7 @@ function Overview({
         <table
           className="standings"
           aria-label={`${period} agent standings`}
-          aria-busy={loading}
+          aria-busy={loadingBoard}
         >
           <thead>
             <tr className="standing header">
@@ -524,7 +666,8 @@ function Overview({
                 </td>
               </tr>
             ))}
-            {!loading && !board.rows.length && (
+            {loadingBoard && !board.rows.length && <StandingsSkeleton />}
+            {!loadingBoard && !board.rows.length && (
               <tr>
                 <td colSpan={5}>
                   <div className="empty">
@@ -540,10 +683,14 @@ function Overview({
           </tbody>
         </table>
       </section>
-      <HistoryChart rows={series.rows} source={series.source} />
+      {loadingSeries && !series.rows.length
+        ? <ChartSkeleton />
+        : <HistoryChart rows={series.rows} source={series.source} updating={loadingSeries} />}
       <section className="coverage">
         <h2>Source coverage</h2>
-        {board.freshness?.map((x: any) => (
+        {loadingBoard && !board.freshness?.length
+          ? <CoverageSkeleton />
+          : board.freshness?.map((x: any) => (
           <div key={x.provider}>
             <Mark id={x.provider} />
             <b>{x.provider}</b>
@@ -622,7 +769,14 @@ function Logs() {
         <h1>Session ledger</h1>
         <p>
           {loading
-            ? "Loading redacted session index…"
+            ? data.rows.length
+              ? "Updating session index…"
+              : (
+                <>
+                  <i className="sk sk-hero" aria-hidden="true" />
+                  <span className="sr-only">Loading redacted session index…</span>
+                </>
+              )
             : `${data.total} indexed sessions with redacted, evidence-addressable events.`}
         </p>
       </header>
@@ -664,11 +818,12 @@ function Logs() {
       {error && <div className="notice error" role="alert"><strong>Sessions could not be loaded.</strong><span>{error}</span><Button onClick={() => setReload((value) => value + 1)}>Retry</Button></div>}
       <div className="ledger">
         <div
-          className="sessionlist"
+          className={`sessionlist ${loading && data.rows.length ? "is-updating" : ""}`}
           ref={parent}
           aria-label="Sessions"
           aria-busy={loading}
         >
+          {loading && !data.rows.length && !error && <SessionListSkeleton />}
           <div style={{ height: virtual.getTotalSize(), position: "relative" }}>
             {virtual.getVirtualItems().map((v) => {
               const s = data.rows[v.index];
@@ -726,7 +881,7 @@ function Logs() {
               <a href={`#e-${e.id}`}>Evidence anchor</a>
             </article>
           ))}
-          {eventsLoading && <div className="empty"><strong>Loading evidence…</strong><span>Reading redacted session events.</span></div>}
+          {eventsLoading && <EventsSkeleton />}
           {eventsError && <div className="notice error" role="alert"><strong>Evidence could not be loaded.</strong><span>{eventsError}</span><Button onClick={() => setReload((value) => value + 1)}>Retry</Button></div>}
           {!selected && !eventsLoading && (
             <div className="empty">
@@ -890,6 +1045,368 @@ function Analyst({ compact = false }: { compact?: boolean }) {
   );
 }
 
+const limitTone = (used: number) =>
+  used >= 0.95 ? "err" : used >= 0.8 ? "warn" : "ok";
+
+function LimitMeter({
+  window: w,
+  providerId,
+  nowMs,
+  titled,
+}: {
+  window: LimitWindowView;
+  providerId: string;
+  nowMs: number;
+  titled?: boolean;
+}) {
+  const pct = Math.round(w.used * 100);
+  const resetIn = w.resetsAt ? Date.parse(w.resetsAt) - nowMs : null;
+  return (
+    <span className={`limit-entry ${limitTone(w.used)}`}>
+      {titled && w.title && <small className="limit-title">{w.title}</small>}
+      <span className="meter" role="img" aria-label={`${w.title}: ${pct}% used`}>
+        <i style={{ width: `${Math.min(100, pct)}%`, background: colors[providerId] ?? "#77838d" }} />
+        <em>{pct}%</em>
+      </span>
+      <small className="limit-reset">
+        {resetIn != null && resetIn > 0
+          ? `resets in ${duration(resetIn)}`
+          : w.resetsAt
+            ? "awaiting refresh"
+            : ""}
+      </small>
+    </span>
+  );
+}
+
+const VERDICT_LABEL: Record<AdviceVerdict, string> = {
+  recommended: "Recommended",
+  usable: "Usable",
+  tight: "Tight",
+  wait: "Wait",
+  unavailable: "Unavailable",
+};
+
+function AdviceRowView({ row }: { row: AdviceRow }) {
+  const tone =
+    row.verdict === "recommended" || row.verdict === "usable"
+      ? "ok"
+      : row.verdict === "tight" || row.verdict === "wait"
+        ? "warn"
+        : "error";
+  return (
+    <li className="advice-row">
+      <Mark id={row.providerId} />
+      <div className="advice-main">
+        <div className="advice-name">
+          <strong>{row.providerName}</strong>
+          <Status tone={tone}>{VERDICT_LABEL[row.verdict]}</Status>
+          {row.estCostUsd != null && (
+            <b className="cost">≈${row.estCostUsd.toFixed(2)}</b>
+          )}
+          {row.unpricedModels.length > 0 && (
+            <b className="cost unpriced">unpriced</b>
+          )}
+        </div>
+        <ul className="reasons">
+          {row.reasons.map((reason, i) => (
+            <li key={i}>{reason}</li>
+          ))}
+        </ul>
+      </div>
+    </li>
+  );
+}
+
+function Limits() {
+  const [board, setBoard] = useState<LimitsBoard | null>(null),
+    [pricing, setPricing] = useState<PricingEntry[] | null>(null),
+    [overrideError, setOverrideError] = useState(""),
+    [task, setTask] = useState<"" | "small" | "medium" | "large">(""),
+    [advice, setAdvice] = useState<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] } | null>(null),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [reload, setReload] = useState(0),
+    [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    setError("");
+    api<LimitsBoard>("/api/limits/board")
+      .then(setBoard)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    api<{ entries: PricingEntry[]; overrideError: string | null }>("/api/limits/pricing")
+      .then((p) => {
+        setPricing(p.entries);
+        setOverrideError(p.overrideError ?? "");
+      })
+      .catch(() => setPricing([]));
+  }, [reload]);
+  useEffect(() => {
+    const query = task ? `?task=${task}` : "";
+    api<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] }>(
+      `/api/limits/advice${query}`,
+    )
+      .then(setAdvice)
+      .catch(() => setAdvice(null));
+  }, [task, reload]);
+  const platforms = board?.platforms ?? [];
+  const tableSummary = platforms
+    .map(
+      (p) =>
+        `${p.providerName}: ${
+          p.binding
+            ? `binding ${Math.round(p.binding.used * 100)}% used`
+            : p.balance
+              ? `$${p.balance.remaining.toFixed(2)} credit left`
+              : "no limits reported"
+        }`,
+    )
+    .join(". ");
+  const refreshCollectors = async () => {
+    setNotice("Refreshing collectors…");
+    try {
+      await api("/api/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      setNotice("Collectors are regenerating records; values will update shortly.");
+      window.setTimeout(() => setReload((n) => n + 1), 4000);
+    } catch (e) {
+      setNotice(`Refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  return (
+    <div className="limits">
+      <header className="pagehead">
+        <h1>Usage limits</h1>
+        <p>
+          Admin-only view of every subscription's session, weekly, and monthly
+          allowances with an advisor for picking the next platform.
+        </p>
+      </header>
+      {error && (
+        <p className="notice error" role="alert">
+          {error} Open the dashboard through its Access-protected hostname —
+          this portal demands Cloudflare authentication on every host.
+        </p>
+      )}
+      {!error && (
+        <>
+          <section className="verdict" aria-live="polite">
+            <h2 className="sr-only">Advisor verdict</h2>
+            {advice ? (
+              <>
+                <p className="verdict-line">{advice.verdictLine}</p>
+                <span className="as-of">
+                  as of {new Date(advice.generatedAt).toLocaleTimeString()}
+                </span>
+              </>
+            ) : (
+              <p className="verdict-line">Consulting local usage records…</p>
+            )}
+            <div className="segmented" role="group" aria-label="Task size">
+              {(
+                [
+                  ["", "General"],
+                  ["small", "Small task"],
+                  ["medium", "Medium task"],
+                  ["large", "Large task"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  aria-pressed={task === value}
+                  onClick={() => setTask(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </section>
+          <section>
+            <div className="section-title">
+              <h2>Platform allowances</h2>
+              <span>{platforms.length} subscriptions reporting</span>
+            </div>
+            <Button onClick={() => void refreshCollectors()}>
+              Refresh collectors
+            </Button>
+            {notice && (
+              <p className="notice" role="status">
+                {notice}
+              </p>
+            )}
+            <div className="table-scroll">
+              <table className="limits-table">
+                <caption className="sr-only">
+                  Usage limits per platform. {tableSummary}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Platform</th>
+                    <th scope="col">Session</th>
+                    <th scope="col">Weekly</th>
+                    <th scope="col">Monthly</th>
+                    <th scope="col">Balance</th>
+                    <th scope="col">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!platforms.length && (
+                    <tr>
+                      <td colSpan={6}>
+                        <Sk w={180} />
+                      </td>
+                    </tr>
+                  )}
+                  {platforms.map((p) => (
+                    <tr key={p.providerId}>
+                      <th scope="row" className="provider">
+                        <Mark id={p.providerId} />
+                        <span>
+                          <b>{p.providerName}</b>
+                          <small>
+                            {p.tier || (p.balance ? "Prepaid" : "Subscription")}
+                          </small>
+                        </span>
+                        <Status
+                          tone={
+                            p.status === "ready"
+                              ? "ok"
+                              : p.status === "stale"
+                                ? "warn"
+                                : "error"
+                          }
+                        >
+                          {p.status}
+                        </Status>
+                      </th>
+                      {(["session", "weekly", "monthly"] as const).map((kind) => {
+                        const wins = p.windows.filter((w) => w.kind === kind);
+                        const worst = wins.reduce(
+                          (acc, w) => Math.max(acc, w.used),
+                          0,
+                        );
+                        return (
+                          <td
+                            key={kind}
+                            className={`limit-cell ${limitTone(worst)}`}
+                            data-label={kind}
+                          >
+                            {wins.length ? (
+                              wins.map((w, i) => (
+                                <LimitMeter
+                                  key={`${w.title}-${i}`}
+                                  window={w}
+                                  providerId={p.providerId}
+                                  nowMs={nowMs}
+                                  titled={wins.length > 1}
+                                />
+                              ))
+                            ) : (
+                              <small className="limit-reset">
+                                {p.windows.length ? "not reported" : "—"}
+                              </small>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="balance">
+                        {p.balance
+                          ? `$${p.balance.remaining.toFixed(2)}${
+                              p.balance.funded
+                                ? ` / $${p.balance.funded.toFixed(2)}`
+                                : ""
+                            }${p.balance.estimated ? " est." : ""}`
+                          : "—"}
+                      </td>
+                      <td className="updated">
+                        {p.updatedAt
+                          ? new Date(p.updatedAt).toLocaleString()
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section>
+            <div className="section-title">
+              <h2>Platform advisor</h2>
+              <span>
+                {task
+                  ? `fit and cost estimated for a ${task} task`
+                  : "ranked by usable headroom right now"}
+              </span>
+            </div>
+            <ol className="advice-list">
+              {(advice?.rows ?? []).map((row) => (
+                <AdviceRowView key={row.providerId} row={row} />
+              ))}
+            </ol>
+          </section>
+          <section>
+            <div className="section-title">
+              <h2>API reference rates</h2>
+              <span>USD per million tokens</span>
+            </div>
+            {overrideError && (
+              <p className="notice error" role="status">
+                pricing.json could not be read ({overrideError}); built-in
+                rates apply.
+              </p>
+            )}
+            <div className="table-scroll">
+              <table className="price-table">
+                <caption className="sr-only">
+                  Reference API rates per model family in US dollars per
+                  million tokens.
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Model</th>
+                    <th scope="col">Input</th>
+                    <th scope="col">Output</th>
+                    <th scope="col">Cache read</th>
+                    <th scope="col">Cache write</th>
+                    <th scope="col">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(pricing ?? []).map((entry) => (
+                    <tr key={entry.model}>
+                      <th scope="row">{entry.model}</th>
+                      <td>${entry.inputPerMtok}</td>
+                      <td>${entry.outputPerMtok}</td>
+                      <td>${entry.cacheReadPerMtok}</td>
+                      <td>${entry.cacheWritePerMtok}</td>
+                      <td>
+                        <span className={`source ${entry.source}`}>
+                          {entry.source}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="hint-line">
+              Models absent here are unpriced — the advisor labels their cost
+              unknown instead of guessing. Override or extend rates via{" "}
+              <code>~/.config/omarchy-agents/pricing.json</code>.
+            </p>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Settings() {
   const [health, setHealth] = useState<any>(null),
     [notice, setNotice] = useState("");
@@ -1025,6 +1542,7 @@ function App() {
     { id: "logs", label: "Logs" },
     { id: "analyst", label: "Analyst" },
     { id: "settings", label: "Settings" },
+    { id: "limits", label: "Limits" },
   ];
   useEffect(() => {
     const query = matchMedia("(max-width: 1100px)");
@@ -1133,6 +1651,7 @@ function App() {
         {nav === "logs" && <Logs />}
         {nav === "analyst" && <Analyst />}
         {nav === "settings" && <Settings />}
+        {nav === "limits" && <Limits />}
       </main>
       {nav !== "analyst" && (
         <aside
@@ -1155,15 +1674,17 @@ function App() {
       )}
       <div className={`scrim ${rail ? "show" : ""}`} onClick={closeRail} />
       <nav className="mobile-nav" aria-label="Mobile primary">
-        {labels.map((x) => (
-          <button
-            key={x.id}
-            aria-current={nav === x.id ? "page" : undefined}
-            onClick={() => navigate(x.id)}
-          >
-            {x.label}
-          </button>
-        ))}
+        {labels
+          .filter((x) => x.id !== "limits")
+          .map((x) => (
+            <button
+              key={x.id}
+              aria-current={nav === x.id ? "page" : undefined}
+              onClick={() => navigate(x.id)}
+            >
+              {x.label}
+            </button>
+          ))}
       </nav>
     </div>
   );

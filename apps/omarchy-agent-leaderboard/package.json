@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "bun ../../tooling/build-plugin.ts . dist",
+    "deploy": "bun run build && rsync -a --delete --exclude .gitignore dist/ ~/.config/omarchy/plugins/harlan.agent-leaderboard/ && omarchy-shell shell rescanPlugins",
     "test": "bun ../../tooling/validate-plugin.ts . && node test/model-test.js",
     "typecheck": "bun ../../tooling/validate-plugin.ts ."
   }

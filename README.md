@@ -2,7 +2,7 @@
 
 Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https://omarchy.org).
 
-- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
+- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. A Cloudflare Access–gated limits portal ranks session, weekly, and monthly allowances across subscriptions, counts down to each refresh, prices tasks at reference API rates, and recommends which platform to run next. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
 - **Agent leaderboard** (`apps/omarchy-agent-leaderboard`) — Omarchy bar widget ranking token usage across every coding agent on the machine. Forked from `mustafaokur.agent-leaderboard` (MIT).
 - **Agent usage** (`apps/omarchy-agent-usage`) — fork of Omarchy's first-party Agents widget focused on per-provider usage and limits.
 - **Provider assets** (`packages/provider-assets`) — single source for provider marks; each app consumes them through a repository-relative symlink, and plugin builds dereference the link so deployed plugin directories stay self-contained.
@@ -48,7 +48,7 @@ bun run deploy:local   # builds plugins into ~/.config/omarchy/plugins/
 
 ## Remote access
 
-`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, self-hosted Access application, and an allow policy for one email. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
+`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, a self-hosted Access application, and an allow policy for one email — plus two additional path-scoped admin Access applications (`/limits` and `/api/limits`) that gate the limits portal. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
 
 Loopback traffic stays unauthenticated; remote requests require a valid Cloudflare Access JWT scoped to your team, audience, and allow-listed email.
 

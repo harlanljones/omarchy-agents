@@ -2,13 +2,42 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { randomUUID } from "node:crypto";
 import { db, json } from "./server/db";
-import { security } from "./server/auth";
+import { security, requireAdmin } from "./server/auth";
 import { rank } from "./server/ranking";
 import { runIndex, indexProgress, startWatching } from "./server/indexer";
 import { chatStream, modelHealth, runNightly } from "./server/analyst";
+import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/limits";
+import { effectivePricingTable, pricingOverrideError } from "./server/pricing";
 import { UsageRecordV1 } from "./shared/schemas";
 
 const app = new Hono(); app.use("*", security);
+app.use("/limits", requireAdmin);
+app.use("/limits/*", requireAdmin);
+app.use("/api/limits", requireAdmin);
+app.use("/api/limits/*", requireAdmin);
+app.use("/api/limits/*", requireAdmin); app.use("/limits", requireAdmin); app.use("/limits/*", requireAdmin);
+app.get("/api/limits/board", c => {
+  const rows = (db.query("SELECT provider, record_json FROM usage_records ORDER BY provider").all() as Array<{ provider: string; record_json: string }>)
+    .flatMap(({ provider, record_json }) => {
+      const parsed = UsageRecordV1.safeParse(json(record_json, {}));
+      if (!parsed.success) return [];
+      const r = parsed.data;
+      return [{
+        provider,
+        name: r.name ?? r.id,
+        tier: r.tierLabel ?? null,
+        scope: r.scope ?? null,
+        ready: r.ready ?? true,
+        limits: r.limits ?? [],
+        balance: r.balance ?? null,
+        status: r.usageStatusText || null,
+        authHelp: r.authHelpText || null,
+        updatedAt: r.updatedAt ?? null,
+      }];
+    })
+    .filter(row => row.limits.length > 0 || row.balance !== null || row.status !== null);
+  return c.json({ rows, generatedAt: new Date().toISOString() });
+});
 export function collectorTimeseries(days: number) {
   const records = (db.query("SELECT record_json FROM usage_records").all() as any[])
     .flatMap((row) => {
@@ -49,6 +78,17 @@ app.get("/api/overview", c => {
   }
   return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: ["claude", "codex", "opencode"].includes(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
 });
+app.get("/api/limits/board", c => c.json(limitsBoard()));
+app.get("/api/limits/advice", c => {
+  const task = c.req.query("task") ?? "";
+  const explicit = { input: Number(c.req.query("input")), output: Number(c.req.query("output")), cacheRead: Number(c.req.query("cache")) };
+  let mix = null;
+  if (task in TASK_PRESETS) mix = TASK_PRESETS[task];
+  else if ([explicit.input, explicit.output, explicit.cacheRead].every(n => Number.isFinite(n) && n >= 0)) mix = explicit;
+  else if (task || c.req.query("input")) return c.json({ error: "task must be small, medium, or large, or pass input/output/cache token counts" }, 400);
+  return c.json(advise(loadUsageRecords(), mix));
+});
+app.get("/api/limits/pricing", c => c.json({ asOfNote: "Reference API rates; override via ~/.config/omarchy-agents/pricing.json", overrideError: pricingOverrideError(), entries: effectivePricingTable() }));
 app.get("/api/filter-options", c => c.json({
   projects: (db.query("SELECT DISTINCT project FROM sessions WHERE project IS NOT NULL AND trim(project) <> '' ORDER BY project COLLATE NOCASE").all() as Array<{ project: string }>).map(row => row.project),
   models: (db.query("SELECT DISTINCT model FROM sessions WHERE model IS NOT NULL AND trim(model) <> '' ORDER BY model COLLATE NOCASE").all() as Array<{ model: string }>).map(row => row.model),

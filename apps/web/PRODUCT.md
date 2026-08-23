@@ -16,7 +16,7 @@ One private user reviewing personal AI-agent usage from the desktop or an authen
 
 ## Product Purpose
 
-Unify provider standings, historical trends, searchable redacted transcripts, and a citation-bound local analyst. Success means a ranking can be traced to local evidence and an analyst claim can be opened at the exact session event that supports it.
+Unify provider standings, historical trends, searchable redacted transcripts, a citation-bound local analyst, and an admin limits portal that ranks subscription headroom, counts down refreshes, prices tasks at reference API rates, and recommends which platform to run next. Success means a ranking can be traced to local evidence, an analyst claim can be opened at the exact session event that supports it, and every limit claim traces to a collector record.
 
 ## Positioning
 
@@ -35,6 +35,7 @@ The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, 
 - The analyst is read-only, bounded to eight tool iterations, and must cite evidence returned by tools.
 - Suggestions may be opened, accepted, or dismissed but never mutate agent files or settings.
 - Remote requests require a valid Cloudflare Access JWT for the configured allow-listed email; loopback use remains unauthenticated.
+- The limits portal is a separate, stricter trust tier: it is gated by dedicated path-scoped Access applications, requires a valid JWT everywhere including loopback, and fails closed when unconfigured.
 
 ## Brand Commitments
 
