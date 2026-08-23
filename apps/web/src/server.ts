@@ -15,29 +15,6 @@ app.use("/limits", requireAdmin);
 app.use("/limits/*", requireAdmin);
 app.use("/api/limits", requireAdmin);
 app.use("/api/limits/*", requireAdmin);
-app.use("/api/limits/*", requireAdmin); app.use("/limits", requireAdmin); app.use("/limits/*", requireAdmin);
-app.get("/api/limits/board", c => {
-  const rows = (db.query("SELECT provider, record_json FROM usage_records ORDER BY provider").all() as Array<{ provider: string; record_json: string }>)
-    .flatMap(({ provider, record_json }) => {
-      const parsed = UsageRecordV1.safeParse(json(record_json, {}));
-      if (!parsed.success) return [];
-      const r = parsed.data;
-      return [{
-        provider,
-        name: r.name ?? r.id,
-        tier: r.tierLabel ?? null,
-        scope: r.scope ?? null,
-        ready: r.ready ?? true,
-        limits: r.limits ?? [],
-        balance: r.balance ?? null,
-        status: r.usageStatusText || null,
-        authHelp: r.authHelpText || null,
-        updatedAt: r.updatedAt ?? null,
-      }];
-    })
-    .filter(row => row.limits.length > 0 || row.balance !== null || row.status !== null);
-  return c.json({ rows, generatedAt: new Date().toISOString() });
-});
 export function collectorTimeseries(days: number) {
   const records = (db.query("SELECT record_json FROM usage_records").all() as any[])
     .flatMap((row) => {

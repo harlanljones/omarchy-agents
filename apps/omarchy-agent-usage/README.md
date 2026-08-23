@@ -56,7 +56,7 @@ light surfaces — and the bar glyph stands in when there is none.
 | `codex` | The Codex app-server RPC | native Codex CLI session files (plus pi and opencode sessions) |
 | `fireworks` | Estimated prepaid balance: configured funding minus rated account costs | Fireworks billing API, grouped by day and model for the last 30 days |
 | `cline` | Estimated from priced transcripts, or real dashboard figures via `/usage` (see below) | `~/.cline/data/sessions` transcripts (per-message token metrics and model attribution) |
-| `opencode` | None (opencode exposes no rate-limit API) | opencode's local session storage (per-model input/output/cache token totals) |
+| `opencode` | Optional provider-scoped token quotas via `OPENCODE_USAGE_LIMITS` | opencode's local session storage (per-provider/model input/output/cache token totals) |
 
 Claude limits need a signed-in CLI; without credentials the panel says so and
 falls back to local stats only. A non-default Claude directory is honored via
@@ -81,6 +81,24 @@ three percentages and reset countdowns, and hands them to
 `~/.config/omarchy/agents/cline-dashboard.json` and refreshes the panel.
 The collector prefers that file over its own estimate for 24 hours, after
 which it quietly falls back to estimating again.
+
+### OpenCode provider limits
+
+OpenCode stores the provider on every assistant message, so the panel keeps
+Zen (`opencode`), Go (`opencode-go`), OpenRouter, and other providers separate.
+Because OpenCode has no common quota endpoint, optional token limits can be
+configured with `OPENCODE_USAGE_LIMITS` or `OPENCODE_USAGE_LIMITS_FILE`:
+
+```json
+{
+  "opencode": { "daily": 1000000, "weekly": 5000000 },
+  "opencode-go": { "monthly": 20000000 },
+  "openrouter": { "daily": 2500000 }
+}
+```
+
+The collector reports used tokens and reset-aware percentages for configured
+windows; providers without a configured quota remain token-only.
 
 ### Fireworks balance
 

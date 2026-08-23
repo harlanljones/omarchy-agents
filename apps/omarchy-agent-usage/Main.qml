@@ -729,7 +729,10 @@ Item {
   // version and title-case the words around it.
   function friendlyModelName(id) {
     if (!id) return "Unknown"
-    var name = String(id).replace(/^claude-/, "").replace(/-\d{8}$/, "")
+    var raw = String(id)
+    var slash = raw.indexOf("/")
+    var provider = slash >= 0 ? raw.substring(0, slash) : ""
+    var name = (slash >= 0 ? raw.substring(slash + 1) : raw).replace(/^claude-/, "").replace(/-\d{8}$/, "")
     var parts = name.split("-")
     var words = []
     var version = []
@@ -747,6 +750,11 @@ Item {
       words.push(modelWordCase(part))
     }
     if (version.length > 0) words.push(version.join("."))
-    return words.length > 0 ? words.join(" ") : "Unknown"
+    var model = words.length > 0 ? words.join(" ") : "Unknown"
+    if (provider === "opencode") provider = "Zen"
+    else if (provider === "opencode-go") provider = "Go"
+    else if (provider === "openrouter") provider = "OpenRouter"
+    else if (provider !== "") provider = provider.replace(/-/g, " ").replace(/\b\w/g, function(letter) { return letter.toUpperCase() })
+    return provider === "" ? model : provider + " / " + model
   }
 }
