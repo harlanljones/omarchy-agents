@@ -56,7 +56,7 @@ light surfaces — and the bar glyph stands in when there is none.
 | `codex` | The Codex app-server RPC | native Codex CLI session files (plus pi and opencode sessions) |
 | `fireworks` | Estimated prepaid balance: configured funding minus rated account costs | Fireworks billing API, grouped by day and model for the last 30 days |
 | `cline` | Estimated from priced transcripts, or real dashboard figures via `/usage` (see below) | `~/.cline/data/sessions` transcripts (per-message token metrics and model attribution) |
-| `opencode` | Optional provider-scoped token quotas via `OPENCODE_USAGE_LIMITS` | opencode's local session storage (per-provider/model input/output/cache token totals) |
+| `opencode` | Real Go Rolling/Weekly/Monthly figures via the Go scraper (see below), plus optional provider-scoped token quotas via `OPENCODE_USAGE_LIMITS` | opencode's local session storage (per-provider/model input/output/cache token totals) |
 
 Claude limits need a signed-in CLI; without credentials the panel says so and
 falls back to local stats only. A non-default Claude directory is honored via
@@ -99,6 +99,35 @@ configured with `OPENCODE_USAGE_LIMITS` or `OPENCODE_USAGE_LIMITS_FILE`:
 
 The collector reports used tokens and reset-aware percentages for configured
 windows; providers without a configured quota remain token-only.
+
+### OpenCode Go limits
+
+The Go plan's real Rolling/Weekly/Monthly meters are not a quota you can
+configure — they live only in the workspace UI, and a configured
+`opencode-go` ceiling can only ever approximate them. The
+`omarchy-opencode-go-usage-scrape` timer reads the real figures every 15
+minutes and hands them to `omarchy-opencode-go-usage-override`, which writes
+`~/.config/omarchy/agents/opencode-go-dashboard.json`. The collector prefers
+that file over any configured `opencode-go` quota for 24 hours, after which
+it quietly falls back to token-only reporting. Other providers' limits are
+untouched either way.
+
+That page needs a signed-in browser, so the scraper drives a dedicated Chrome
+profile rather than your everyday one. Sign it in once with
+`omarchy-opencode-go-usage-login`; re-run it whenever the scraper's logs say
+the session expired.
+
+Unlike the Cline scraper, this one does not read rendered text. The Go page
+is server-rendered and inlines each window as a named `usagePercent` /
+`resetInSec` pair, so the scraper parses the payload by key — the numbers
+survive a visual redesign. It also discovers the workspace id by following
+the workspace link on `https://opencode.ai/go`, so there is nothing to
+configure.
+
+For the numbers on demand — or when the saved session has expired — the
+`opencode-go-usage` skill in `~/.config/opencode/skills/` runs the scraper,
+and otherwise walks you through reading the three windows off the page and
+recording them with the same override command.
 
 ### Fireworks balance
 

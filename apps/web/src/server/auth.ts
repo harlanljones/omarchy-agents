@@ -38,7 +38,7 @@ export function _setAccessVerifierForTests(verify: ((token: string, issuer: stri
 export const isAdminPath = (path: string) =>
   path === "/limits" || path.startsWith("/limits/") || path === "/api/limits" || path.startsWith("/api/limits/");
 
-const isServiceOrigin = (host: string) => Boolean(apiHost()) && host === apiHost() && Boolean(apiAudience()) && Boolean(serviceClientId());
+const isServiceOrigin = (host: string) => host !== remoteHost() && Boolean(apiHost()) && host === apiHost() && Boolean(apiAudience()) && Boolean(serviceClientId());
 
 export async function security(c: Context, next: Next) {
   const host = lower((c.req.header("host") ?? "").split(":")[0]);

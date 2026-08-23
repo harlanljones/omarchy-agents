@@ -8,15 +8,15 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "mustafaokur.agent-leaderboard"
-  ipcTarget: "mustafaokur.agent-leaderboard"
+  moduleName: "harlan.agent-leaderboard"
+  ipcTarget: "harlan.agent-leaderboard"
   manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property color surface: Color.popups.background
-  readonly property color track: root.alpha(root.accent, 0.18)
+  readonly property color track: root.alpha(root.accent, 0.42)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property url trophyMark: Qt.resolvedUrl("assets/trophy.svg")
 
@@ -632,8 +632,10 @@ Panel {
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
+      width: Style.space(30)
+      horizontalAlignment: Text.AlignRight
       anchors.right: tokensLabel.left
-      anchors.rightMargin: Style.space(8)
+      anchors.rightMargin: Style.space(12)
       anchors.verticalCenter: parent.verticalCenter
     }
 
@@ -644,8 +646,10 @@ Panel {
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
       font.bold: true
+      width: Style.space(46)
+      horizontalAlignment: Text.AlignRight
       anchors.right: parent.right
-      anchors.rightMargin: Style.space(8)
+      anchors.rightMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
     }
 
@@ -695,7 +699,7 @@ Panel {
                 required property int index
                 width: dayTrack.width
                 height: Math.max(0, dayTrack.height * (modelData.tokens / Math.max(1, dayCol.day.total)) - (index > 0 ? 1 : 0))
-                color: root.alpha(root.agentAccent(modelData.providerId), dayCol.today ? 1.0 : 0.78)
+                color: root.alpha(root.agentAccent(modelData.providerId), dayCol.today ? 1.0 : 0.9)
               }
             }
           }
