@@ -71,12 +71,12 @@ export async function security(c: Context, next: Next) {
 export async function requireAdmin(c: Context, next: Next) {
   const audiences = adminAudiences();
   if (!audiences.length || !allowedEmail() || !accessTeam()) return c.json({ error: "The limits portal is not configured; set CLOUDFLARE_ACCESS_ADMIN_AUD, ACCESS_EMAIL, and CLOUDFLARE_ACCESS_TEAM" }, 401);
-  if (isServiceOrigin(lower((c.req.header("host") ?? "").split(":")[0]))) return c.json({ error: "The limits portal is not available to service identities" }, 403);
   const token = c.req.header("cf-access-jwt-assertion");
   if (!token) return c.json({ error: "The limits portal requires Cloudflare Access authentication; use the dashboard hostname" }, 401);
   for (const audience of audiences) {
     try {
       const { payload } = await verifyAccess(token, audience);
+      if (payload.common_name) return c.json({ error: "The limits portal is not available to service identities" }, 403);
       if (lower(String(payload.email ?? "")) !== allowedEmail()) return c.json({ error: "Identity not allowed" }, 403);
       return await next();
     } catch { }

@@ -8,6 +8,8 @@ interface Env {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/limits" || url.pathname.startsWith("/limits/"))
+      return Response.redirect(new URL(url.pathname + url.search, env.API_ORIGIN), 302);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
 
     const origin = new URL(env.API_ORIGIN);

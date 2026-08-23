@@ -8,7 +8,7 @@ const setEnv = (key: string, value: string) => { savedEnv[key] ??= process.env[k
 
 let app: typeof import("../src/server").default;
 let privateKey: CryptoKey;
-let signToken: (audience: string, email?: string) => Promise<string>;
+let signToken: (audience: string, email?: string, extra?: Record<string, unknown>) => Promise<string>;
 let setVerifier: (typeof import("../src/server/auth"))["_setAccessVerifierForTests"];
 
 beforeAll(async () => {
@@ -26,7 +26,7 @@ beforeAll(async () => {
   const localJwks = createLocalJWKSet({ keys: [{ ...jwk, alg: "RS256", use: "sig" }] });
   setVerifier((token, issuer, audience) => jwtVerify(token, localJwks, { issuer, audience }));
   const issuer = "https://test-team.cloudflareaccess.com";
-  signToken = (audience, email = "admin@example.com") => new SignJWT({ email })
+  signToken = (audience, email = "admin@example.com", extra: Record<string, unknown> = {}) => new SignJWT({ email, ...extra })
     .setProtectedHeader({ alg: "RS256" }).setIssuer(issuer).setAudience(audience)
     .setIssuedAt().setExpirationTime("5m").sign(privateKey);
 });
@@ -62,13 +62,28 @@ describe("limits portal boundary", () => {
   test("rejects a valid token for a different email", async () =>
     expect((await get("/limits/api/board", "127.0.0.1", await signToken("aud-admin-a", "intruder@example.com"))).status).toBe(403));
 
-  test("blocks the service-origin path to the portal", async () => {
+  test("blocks service identities from the portal on any host", async () => {
+    setEnv("API_HOSTNAME", "api.example.com");
+    setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
+    setEnv("ACCESS_CLIENT_ID", "svc.client");
+    try {
+      const serviceToken = await signToken("aud-admin-a", "admin@example.com", { common_name: "svc.client" });
+      const response = await get("/limits/api/board", "api.example.com", serviceToken);
+      expect(response.status).toBe(403);
+      const loopbackResponse = await get("/limits/api/board", "127.0.0.1", serviceToken);
+      expect(loopbackResponse.status).toBe(403);
+    } finally {
+      for (const key of ["API_HOSTNAME", "CLOUDFLARE_ACCESS_API_AUD", "ACCESS_CLIENT_ID"]) delete process.env[key];
+    }
+  });
+
+  test("accepts a person token for the portal on the service origin", async () => {
     setEnv("API_HOSTNAME", "api.example.com");
     setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
     setEnv("ACCESS_CLIENT_ID", "svc.client");
     try {
       const response = await get("/limits/api/board", "api.example.com", await signToken("aud-admin-a"));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(200);
     } finally {
       for (const key of ["API_HOSTNAME", "CLOUDFLARE_ACCESS_API_AUD", "ACCESS_CLIENT_ID"]) delete process.env[key];
     }

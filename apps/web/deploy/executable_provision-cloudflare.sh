@@ -4,7 +4,7 @@ set -euo pipefail
 : "${CLOUDFLARE_API_TOKEN:?Set a scoped Cloudflare API token}"
 : "${CLOUDFLARE_ACCOUNT_ID:?Set the Cloudflare account ID}"
 : "${CLOUDFLARE_ZONE_ID:?Set your Cloudflare zone ID}"
-: "${DASHBOARD_HOSTNAME:?Set the dashboard hostname, e.g. agents.example.com}"
+: "${DASHBOARD_HOSTNAME:?Set the tunnel hostname, e.g. agents-api.example.com — the Access-protected origin the Worker proxies to}"
 : "${ACCESS_EMAIL:?Set the email allowed through Cloudflare Access}"
 
 api="https://api.cloudflare.com/client/v4"
@@ -133,5 +133,5 @@ printf 'Provisioned %s via tunnel %s with admin apps and the worker service poli
 printf 'Next:\n'
 printf '  1. cd apps/web && bunx wrangler secret put ACCESS_CLIENT_ID      # %s\n' "$svc_client_id"
 printf '  2. bunx wrangler secret put ACCESS_CLIENT_SECRET                 # the secret saved above\n'
-printf '  3. Set DASHBOARD_HOSTNAME=%s in %s/dashboard.env\n' "$host" "$config_dir"
+printf '  3. Set DASHBOARD_HOSTNAME=<browser-facing hostname> in %s/dashboard.env if it differs from %s; the portal lives at %s/limits\n' "$config_dir" "$host" "$host"
 printf '  4. systemctl --user enable --now omarchy-agents-tunnel.service && systemctl --user restart omarchy-agents-dashboard.service\n'
