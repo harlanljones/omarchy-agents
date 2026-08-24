@@ -96,6 +96,9 @@ describe("advisor", () => {
     expect(clineRow.verdict).toBe("tight");
     expect(clineRow.reasons.some(r => r.startsWith("Only 5% left"))).toBe(true);
     expect(clineRow.reasons.join(" ")).toContain("Weekly 95% used");
+    expect(advice.confidence).toBe("medium");
+    expect(advice.fallbackProviderName).toBe("Fireworks");
+    expect(advice.recommendationResetsAt).toBeNull();
   });
   test("all-constrained boards produce a wait-for-refresh verdict line", () => {
     const exhausted = advise([record({ ...claude, limits: [{ label: "Weekly (7-day)", percent: 1, resetsAt: hoursFromNow(100) }] })], null, NOW);

@@ -93,6 +93,9 @@ export type AdviceRow = {
 export type AdviceResponse = {
   generatedAt: string, mode: "general" | "task", verdictLine: string,
   taskTokens: { input: number, output: number, cacheRead: number } | null,
+  fallbackProviderId: string | null, fallbackProviderName: string | null,
+  recommendationResetsAt: string | null,
+  confidence: "high" | "medium" | "low",
   rows: AdviceRow[]
 };
 export type PricingSource = "built-in" | "override";

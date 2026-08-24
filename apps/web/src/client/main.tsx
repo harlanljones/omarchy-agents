@@ -1129,7 +1129,9 @@ function Limits() {
     [pricing, setPricing] = useState<PricingEntry[] | null>(null),
     [overrideError, setOverrideError] = useState(""),
     [task, setTask] = useState<"" | "small" | "medium" | "large">(""),
-    [advice, setAdvice] = useState<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] } | null>(null),
+    [custom, setCustom] = useState({ input: "", output: "", cacheRead: "" }),
+    [sortRisk, setSortRisk] = useState(true),
+    [advice, setAdvice] = useState<{ verdictLine: string; generatedAt: string; rows: AdviceRow[]; fallbackProviderName: string | null; recommendationResetsAt: string | null; confidence: "high" | "medium" | "low" } | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [reload, setReload] = useState(0),
@@ -1151,14 +1153,33 @@ function Limits() {
       .catch(() => setPricing([]));
   }, [reload]);
   useEffect(() => {
-    const query = task ? `?task=${task}` : "";
+    const params = new URLSearchParams();
+    if (task) params.set("task", task);
+    else if (Object.values(custom).some(Boolean)) {
+      params.set("input", custom.input);
+      params.set("output", custom.output);
+      params.set("cache", custom.cacheRead);
+    }
     api<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] }>(
-      `/limits/api/advice${query}`,
+      `/limits/api/advice${params.size ? `?${params}` : ""}`,
     )
       .then(setAdvice)
       .catch(() => setAdvice(null));
-  }, [task, reload]);
-  const platforms = board?.platforms ?? [];
+  }, [task, custom, reload]);
+  const platforms = useMemo(() => {
+    const rows = [...(board?.platforms ?? [])];
+    if (!sortRisk) return rows;
+    return rows.sort((a, b) => {
+      const risk = (p: typeof a) => p.status !== "ready" ? 0 : p.binding ? 1 - p.binding.used : p.balance?.funded ? p.balance.remaining / p.balance.funded : 0.5;
+      return risk(a) - risk(b) || a.providerName.localeCompare(b.providerName);
+    });
+  }, [board, sortRisk]);
+  const resets = useMemo(() => (board?.platforms ?? []).flatMap((platform) => platform.windows.map((window) => ({ ...window, providerName: platform.providerName, status: platform.status }))).sort((a, b) => {
+    const at = a.resetsAt ? Date.parse(a.resetsAt) : Number.POSITIVE_INFINITY;
+    const bt = b.resetsAt ? Date.parse(b.resetsAt) : Number.POSITIVE_INFINITY;
+    return at - bt;
+  }), [board]);
+  const bindingPlatform = platforms.find((platform) => platform.binding) ?? platforms[0];
   const tableSummary = platforms
     .map(
       (p) =>
@@ -1207,7 +1228,7 @@ function Limits() {
               <>
                 <p className="verdict-line">{advice.verdictLine}</p>
                 <span className="as-of">
-                  as of {new Date(advice.generatedAt).toLocaleTimeString()}
+                  as of {new Date(advice.generatedAt).toLocaleTimeString()} · confidence {advice.confidence}
                 </span>
               </>
             ) : (
@@ -1231,11 +1252,21 @@ function Limits() {
                 </button>
               ))}
             </div>
+            <div className="workload-controls" aria-label="Custom workload estimate">
+              <label>Input <input inputMode="numeric" value={custom.input} placeholder="tokens" onChange={(e) => { setTask(""); setCustom({ ...custom, input: e.target.value.replace(/[^0-9]/g, "") }); }} /></label>
+              <label>Output <input inputMode="numeric" value={custom.output} placeholder="tokens" onChange={(e) => { setTask(""); setCustom({ ...custom, output: e.target.value.replace(/[^0-9]/g, "") }); }} /></label>
+              <label>Cache read <input inputMode="numeric" value={custom.cacheRead} placeholder="tokens" onChange={(e) => { setTask(""); setCustom({ ...custom, cacheRead: e.target.value.replace(/[^0-9]/g, "") }); }} /></label>
+              {Object.values(custom).some(Boolean) && <button className="text-button" onClick={() => setCustom({ input: "", output: "", cacheRead: "" })}>Clear custom</button>}
+            </div>
+            <p className="capacity-brief">
+              {bindingPlatform?.binding ? <><strong>{bindingPlatform.providerName}</strong> binds first at {Math.round(bindingPlatform.binding.used * 100)}% used ({Math.round((1 - bindingPlatform.binding.used) * 100)}% headroom){bindingPlatform.binding.resetsAt ? `; resets ${new Date(bindingPlatform.binding.resetsAt).toLocaleString()}` : "; reset unknown"}.</> : "No binding limit is confirmed from current records."}
+              {advice?.fallbackProviderName && <> Fallback: <strong>{advice.fallbackProviderName}</strong>{advice.recommendationResetsAt ? ` until ${new Date(advice.recommendationResetsAt).toLocaleString()}` : " while the primary recovers"}.</>}
+            </p>
           </section>
           <section>
             <div className="section-title">
               <h2>Platform allowances</h2>
-              <span>{platforms.length} subscriptions reporting</span>
+              <span>{platforms.length} subscriptions reporting · <button className="text-button" onClick={() => setSortRisk((value) => !value)}>{sortRisk ? "risk first" : "provider order"}</button></span>
             </div>
             <Button onClick={() => void refreshCollectors()}>
               Refresh collectors
@@ -1339,6 +1370,16 @@ function Limits() {
                 </tbody>
               </table>
             </div>
+          </section>
+          <section>
+            <div className="section-title"><h2>Reset timeline</h2><span>earliest recovery first</span></div>
+            <ol className="reset-timeline">
+              {resets.length ? resets.map((window, index) => {
+                const resetMs = window.resetsAt ? Date.parse(window.resetsAt) - nowMs : null;
+                const state = !window.resetsAt ? "unknown reset" : resetMs != null && resetMs <= 0 ? "awaiting refresh" : `in ${duration(resetMs!)}`;
+                return <li key={`${window.providerName}-${window.title}-${index}`}><strong>{window.providerName}</strong><span>{window.title}</span><Status tone={window.status === "ready" ? (resetMs != null && resetMs <= 0 ? "warn" : "ok") : "error"}>{state}</Status></li>;
+              }) : <li className="muted">No reset windows reported; capacity is unknown.</li>}
+            </ol>
           </section>
           <section>
             <div className="section-title">

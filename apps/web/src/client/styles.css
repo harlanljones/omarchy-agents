@@ -1123,6 +1123,68 @@ select {
   grid-row: 1 / span 2;
   grid-column: 2;
 }
+.capacity-brief {
+  grid-column: 1 / -1;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.workload-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+.workload-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--dim);
+  font: 10px "IBM Plex Mono";
+  text-transform: uppercase;
+}
+.workload-controls input {
+  width: 106px;
+  padding: 7px 8px;
+  color: var(--base);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 12px "IBM Plex Mono";
+}
+.text-button {
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+.reset-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reset-timeline li {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.reset-timeline li > span {
+  color: var(--muted);
+}
+.reset-timeline .muted {
+  display: block;
+  color: var(--dim);
+}
 .table-scroll {
   overflow-x: auto;
 }
@@ -1318,5 +1380,15 @@ select {
 @media (max-width: 720px) {
   .limits section {
     padding: 18px 0 22px;
+  }
+  .reset-timeline li {
+    grid-template-columns: 1fr auto;
+  }
+  .reset-timeline li > span {
+    grid-column: 1;
+  }
+  .reset-timeline li > .status {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
 }

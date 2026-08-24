@@ -154,17 +154,33 @@ export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = D
   const waits = rows.filter(r => r.verdict === "wait");
   const earliestWait = waits.flatMap(r => r.bindingResetsAt ? [new Date(r.bindingResetsAt).valueOf()] : []).sort((a, b) => a - b)[0];
   const top = available[0];
+  const fallback = available.find(row => row.providerId !== top?.providerId && (row.verdict === "recommended" || row.verdict === "usable")) ?? null;
+  const recommendationResetsAt = top?.bindingResetsAt ?? null;
+  const confidence = platforms.length === 0
+    ? "low"
+    : platforms.some(platform => platform.status === "stale" || platform.status === "no-data")
+      ? "low"
+      : platforms.some(platform => !platform.binding && !platform.balance)
+        ? "medium"
+        : "high";
+  const fallbackLine = fallback
+    ? ` Use ${fallback.providerName}${recommendationResetsAt ? ` until ${new Date(recommendationResetsAt).toLocaleString()}` : " as fallback"}.`
+    : "";
   const verdictLine = !top
     ? "Every platform needs attention — none are ready to take work."
     : waits.length && (!top || top.verdict === "wait")
       ? `Everything is constrained; the soonest refresh frees capacity in ${formatDuration((earliestWait ?? now) - now)}.`
-      : `${top.providerName} first — ${top.reasons[0]?.toLowerCase() ?? "cleared for work"}${taskMix ? (top.fitsTask === true ? "; it fits this task (est.)" : top.fitsTask === false ? "; it does not fit this task (est.)" : "") : ""}.`;
+      : `${top.providerName} first — ${top.reasons[0]?.toLowerCase() ?? "cleared for work"}${taskMix ? (top.fitsTask === true ? "; it fits this task (est.)" : top.fitsTask === false ? "; it does not fit this task (est.)" : "") : ""}.${fallbackLine}`;
 
   return {
     generatedAt: new Date(now).toISOString(),
     mode: taskMix ? "task" : "general",
     verdictLine,
     taskTokens: taskMix,
+    fallbackProviderId: fallback?.providerId ?? null,
+    fallbackProviderName: fallback?.providerName ?? null,
+    recommendationResetsAt,
+    confidence,
     rows,
   };
 }
