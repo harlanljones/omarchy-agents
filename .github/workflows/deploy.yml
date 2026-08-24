@@ -1,0 +1,43 @@
+name: Deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Self-hosted runner on the Omarchy machine: the dashboard systemd unit
+    # and the desktop plugin directories only exist there. Never trigger on
+    # pull_request — this repo is public.
+    runs-on: [self-hosted, omarchy-local]
+    timeout-minutes: 20
+    env:
+      REPO_DIR: /home/harlan/dev/omarchy-agents
+    steps:
+      - name: Prepare environment
+        run: |
+          echo "$HOME/.local/share/mise/installs/bun/latest/bin" >> "$GITHUB_PATH"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+      - name: Sync live working tree
+        run: git -C "$REPO_DIR" pull --ff-only
+      - name: Install dependencies
+        working-directory: ${{ env.REPO_DIR }}
+        run: bun install --frozen-lockfile
+      - name: Build
+        working-directory: ${{ env.REPO_DIR }}
+        run: bun run build
+      - name: Deploy Cloudflare Worker
+        working-directory: ${{ env.REPO_DIR }}/apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler deploy
+      - name: Restart dashboard service
+        run: systemctl --user restart omarchy-agents-dashboard.service
+      - name: Deploy desktop plugins
+        working-directory: ${{ env.REPO_DIR }}
+        run: bash tooling/deploy-local.sh
