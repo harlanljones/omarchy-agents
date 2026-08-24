@@ -16,6 +16,9 @@ const roots = [
 ];
 const usageDir = process.env.AGENT_USAGE_DIR ?? `${home}/.local/state/omarchy/agents/usage`;
 const INDEXER_VERSION = "token-usage-v2";
+// Separate from INDEXER_VERSION: gates the opencode.db time_updated cursor
+// stored in checkpoints.mtime_ms, without invalidating per-file jsonl checkpoints.
+const OPENCODE_CURSOR_VERSION = "opencode-cursor-v1";
 let active = false;
 let progress = { state: "idle", scanned: 0, indexed: 0, total: 0, current: "", startedAt: "", finishedAt: "", errors: 0 };
 
@@ -154,12 +157,18 @@ function refreshUsage() {
 function indexOpenCode() {
   const path = `${home}/.local/share/opencode/opencode.db`;
   if (!existsSync(path)) return;
-  const stat = statSync(path), checkpoint = db.query("SELECT size,mtime_ms FROM checkpoints WHERE source_path=?").get(path) as any;
-  if (checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs) && checkpoint?.status === INDEXER_VERSION) return;
+  const checkpoint = db.query("SELECT mtime_ms,status FROM checkpoints WHERE source_path=?").get(path) as any;
+  // Cursor is the highest session time_updated (epoch ms) indexed so far; the
+  // 60s overlap re-touches sessions near the boundary so in-flight writes that
+  // land mid-pass are picked up on the next pass.
+  const cursor = checkpoint?.status === OPENCODE_CURSOR_VERSION ? Math.max(0, Number(checkpoint?.mtime_ms) || 0) : 0;
   const source = new SourceDatabase(path, { readonly: true, strict: true });
   try {
-    const sessions = source.query("SELECT id,directory,title,model,time_created,time_updated,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write FROM session ORDER BY time_created").all() as any[];
+    const sessions = source.query("SELECT id,directory,title,model,time_created,time_updated,tokens_input,tokens_output,tokens_cache_read,tokens_cache_write FROM session WHERE time_updated > ? ORDER BY time_updated").all(Math.max(0, cursor - 60_000)) as any[];
+    let maxUpdated = cursor;
     for (const raw of sessions) {
+      maxUpdated = Math.max(maxUpdated, tokenNumber(raw.time_updated));
+      if (tokenNumber(raw.time_updated) <= cursor && cursor > 0) continue;
       const messageRoles = new Map((source.query("SELECT id,data FROM message WHERE session_id=? ORDER BY time_created,id").all(raw.id) as any[]).map(m => { const data = JSON.parse(m.data); return [m.id, data.role ?? "unknown"]; }));
       const parts = source.query("SELECT id,message_id,time_created,data FROM part WHERE session_id=? ORDER BY time_created,id").all(raw.id) as any[];
       const events: Event[] = [];
@@ -175,7 +184,7 @@ function indexOpenCode() {
       persist(NormalizedSession.parse({ id: raw.id, provider: "opencode", model: raw.model ?? null, project: raw.directory ?? null, title: raw.title ?? null, startedAt: epochIso(raw.time_created, fallback), endedAt: epochIso(raw.time_updated, fallback), sourcePath: path, sourceKey: `opencode:${raw.id}`, tokenInput: tokenNumber(raw.tokens_input), tokenOutput: tokenNumber(raw.tokens_output), cacheRead: tokenNumber(raw.tokens_cache_read), cacheWrite: tokenNumber(raw.tokens_cache_write), errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "opencode-sqlite" } }), events);
       progress.indexed++;
     }
-    db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(path, "opencode", stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), INDEXER_VERSION);
+    db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(path, "opencode", 0, maxUpdated, new Date().toISOString(), OPENCODE_CURSOR_VERSION);
   } finally { source.close(); }
 }
 
@@ -193,7 +202,7 @@ export async function runIndex(options: { rebuild?: boolean } = {}) {
     for (const file of files) {
       progress.scanned++; progress.current = file.path; seen.add(file.path);
       try {
-        const stat = statSync(file.path); const checkpoint = db.query("SELECT size,mtime_ms FROM checkpoints WHERE source_path=?").get(file.path) as any;
+        const stat = statSync(file.path); const checkpoint = db.query("SELECT size,mtime_ms,status FROM checkpoints WHERE source_path=?").get(file.path) as any;
         if (!options.rebuild && checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs) && checkpoint?.status === INDEXER_VERSION) continue;
         if (extname(file.path) !== ".jsonl" || stat.size > 50_000_000) continue;
         const parsed = parseJsonl(file.provider, file.path, readFileSync(file.path, "utf8")); persist(parsed.session, parsed.events);
@@ -213,8 +222,14 @@ export function indexProgress() { return { ...progress }; }
 let watchers: FSWatcher[] = [], timer: Timer | undefined;
 export function startWatching() {
   if (watchers.length) return;
+  // opencode.db (+wal/shm) is rewritten continuously by live agents; reacting to
+  // it triggers an endless re-index loop. Only session-file changes schedule a pass.
+  const isDatabaseChurn = (file: string | null) => !file || /opencode\.db(-wal|-shm)?$/.test(file);
   for (const root of [...roots, { provider: "usage", path: usageDir, kinds: [".json"] }]) if (existsSync(root.path)) {
-    try { watchers.push(watch(root.path, { recursive: true }, () => { clearTimeout(timer); timer = setTimeout(() => void runIndex(), 750); })); } catch {}
+    try { watchers.push(watch(root.path, { recursive: true }, (_event, filename) => {
+      if (root.provider === "opencode" && isDatabaseChurn(filename)) return;
+      clearTimeout(timer); timer = setTimeout(() => void runIndex(), 15_000);
+    })); } catch {}
   }
   setInterval(() => void runIndex(), 15 * 60_000).unref();
 }
