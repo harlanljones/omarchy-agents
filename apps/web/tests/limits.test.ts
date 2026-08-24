@@ -146,6 +146,50 @@ describe("advisor", () => {
   });
 });
 
+describe("task profiles (Phase 3 safer routing)", () => {
+  test("a provider whose dominant model misses a required capability is excluded before headroom ranking", () => {
+    // cline's dominant model is deepseek-v4-flash: matches "code generation" but not "deep reasoning".
+    const advice = advise([claude, cline], null, NOW, { requiredCapabilities: ["deep reasoning"], preferredProviders: [] });
+    const clineRow = advice.rows.find(r => r.providerId === "cline")!;
+    expect(clineRow.excludedByProfile).toBe(true);
+    expect(clineRow.verdict).toBe("unavailable");
+    expect(clineRow.reasons[0]).toContain("Excluded by task profile");
+    const claudeRow = advice.rows.find(r => r.providerId === "claude")!;
+    expect(claudeRow.excludedByProfile).toBe(false);
+    expect(advice.rows[0].providerId).toBe("claude");
+    expect(advice.fallbackProviderId).not.toBe("cline");
+  });
+  test("providers without dominant-model evidence are never excluded on uncertain grounds", () => {
+    const advice = advise([codex], null, NOW, { requiredCapabilities: ["deep reasoning"], preferredProviders: [] });
+    expect(advice.rows[0].excludedByProfile).toBe(false);
+  });
+  test("preferred providers rank ahead of higher-score peers within the same verdict tier", () => {
+    // Same "usable" tier (headroom 0.25-0.5), but alpha scores higher on headroom alone.
+    const alpha = record({ id: "alpha", name: "Alpha", ready: true, updatedAt: hoursFromNow(0), limits: [{ label: "Weekly", percent: 0.55, resetsAt: hoursFromNow(50) }] });
+    const beta = record({ id: "beta", name: "Beta", ready: true, updatedAt: hoursFromNow(0), limits: [{ label: "Weekly", percent: 0.7, resetsAt: hoursFromNow(50) }] });
+    const unprofiled = advise([alpha, beta], null, NOW);
+    expect(unprofiled.rows[0].providerId).toBe("alpha");
+    const advice = advise([alpha, beta], null, NOW, { requiredCapabilities: [], preferredProviders: ["beta"] });
+    expect(advice.rows[0].providerId).toBe("beta");
+  });
+  test("a profile that excludes every ready platform reports it plainly", () => {
+    // claude's dominant model is claude-opus-5: matches "deep reasoning" but not "low latency".
+    const advice = advise([claude], null, NOW, { requiredCapabilities: ["low latency"], preferredProviders: [] });
+    expect(advice.rows[0].excludedByProfile).toBe(true);
+    expect(advice.verdictLine).toContain("required capabilities");
+  });
+  test("advice echoes back the profile it was computed with", () => {
+    const profile = { requiredCapabilities: ["code generation"], preferredProviders: ["claude"] };
+    const advice = advise([claude], null, NOW, profile);
+    expect(advice.profile).toEqual(profile);
+  });
+  test("no profile leaves prior behavior untouched", () => {
+    const advice = advise([claude, cline], null, NOW);
+    expect(advice.rows.every(r => r.excludedByProfile === false)).toBe(true);
+    expect(advice.profile).toBeNull();
+  });
+});
+
 describe("formatting", () => {
   test("durations match the widget's vocabulary", () => {
     expect(formatDuration(0)).toBe("now");

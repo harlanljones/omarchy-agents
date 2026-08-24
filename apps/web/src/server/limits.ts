@@ -1,8 +1,8 @@
 import { db, json } from "./db";
 import { classifyWindow, deriveStatus, formatDuration } from "./watch";
-import { UsageRecordV1, type AdviceResponse, type AdviceRow, type AdviceVerdict, type LimitKind, type LimitWindowView, type LimitsBoard, type PlatformLimits, type UsageRecord } from "../shared/schemas";
-import { indexProgress } from "./indexer";
+import { UsageRecordV1, type AdviceResponse, type AdviceRow, type AdviceVerdict, type LimitKind, type LimitWindowView, type LimitsBoard, type PlatformLimits, type TaskProfile, type UsageRecord } from "../shared/schemas";
 import { dominantModel, estimateCostUsd, ratesForModel, type TokenMix } from "./pricing";
+import { modelMatchesCapability } from "./prompt-analysis";
 
 export { classifyWindow, formatDuration };
 
@@ -66,7 +66,7 @@ const mixTotal = (mix: TokenMix) => mix.input + mix.output + mix.cacheRead;
 
 const VERDICT_ORDER: AdviceVerdict[] = ["recommended", "usable", "tight", "wait", "unavailable"];
 
-export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = Date.now()): AdviceResponse {
+export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = Date.now(), profile: TaskProfile | null = null): AdviceResponse {
   const platforms = records.map(r => buildPlatformLimits(r, now));
   const rows: AdviceRow[] = platforms.map(platform => {
     const record = records.find(r => r.id === platform.providerId)!;
@@ -93,6 +93,20 @@ export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = D
       if (platform.balance) reasons.push(`Prepaid $${platform.balance.remaining.toFixed(2)} of $${(platform.balance.funded ?? 0).toFixed(2)} left${platform.balance.estimated ? " · estimated" : ""}`);
     }
 
+    // Task profiles exclude unsuitable providers ahead of headroom ranking:
+    // a provider missing a required capability is never top pick or fallback,
+    // no matter how much headroom it has left.
+    let excludedByProfile = false;
+    if (profile?.requiredCapabilities.length && verdict !== "unavailable") {
+      const model = dominantModel(record);
+      const unmet = model ? profile.requiredCapabilities.filter(cap => !modelMatchesCapability(model, cap)) : [];
+      if (unmet.length) {
+        excludedByProfile = true;
+        verdict = "unavailable"; score = 0;
+        reasons.unshift(`Excluded by task profile — missing ${unmet.join(", ")} (dominant model ${model})`);
+      }
+    }
+
     let fitsTask: boolean | null = null;
     let estCostUsd: number | null = null;
     const unpricedModels: string[] = [];
@@ -114,8 +128,11 @@ export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = D
       else if (unpricedModels.length) reasons.push(`${unpricedModels[0]} is unpriced — API cost unknown`);
     }
 
-    return { providerId: platform.providerId, providerName: platform.providerName, verdict, score, headroom, fitsTask, estCostUsd, unpricedModels, reasons, bindingResetsAt: platform.binding?.resetsAt ?? null };
-  }).sort((a, b) => VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || b.score - a.score || a.providerName.localeCompare(b.providerName));
+    return { providerId: platform.providerId, providerName: platform.providerName, verdict, score, headroom, fitsTask, estCostUsd, unpricedModels, reasons, bindingResetsAt: platform.binding?.resetsAt ?? null, excludedByProfile };
+  }).sort((a, b) => {
+    const preferredRank = (row: AdviceRow) => profile?.preferredProviders.length && profile.preferredProviders.includes(row.providerId) ? 0 : 1;
+    return VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || preferredRank(a) - preferredRank(b) || b.score - a.score || a.providerName.localeCompare(b.providerName);
+  });
 
   const available = rows.filter(r => r.verdict !== "unavailable");
   const waits = rows.filter(r => r.verdict === "wait");
@@ -133,8 +150,11 @@ export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = D
   const fallbackLine = fallback
     ? ` Use ${fallback.providerName}${recommendationResetsAt ? ` until ${new Date(recommendationResetsAt).toLocaleString()}` : " as fallback"}.`
     : "";
+  const allExcludedByProfile = !top && rows.length > 0 && rows.every(r => r.excludedByProfile);
   const verdictLine = !top
-    ? "Every platform needs attention — none are ready to take work."
+    ? allExcludedByProfile
+      ? "No platform meets this task's required capabilities right now."
+      : "Every platform needs attention — none are ready to take work."
     : waits.length && (!top || top.verdict === "wait")
       ? `Everything is constrained; the soonest refresh frees capacity in ${formatDuration((earliestWait ?? now) - now)}.`
       : `${top.providerName} first — ${top.reasons[0]?.toLowerCase() ?? "cleared for work"}${taskMix ? (top.fitsTask === true ? "; it fits this task (est.)" : top.fitsTask === false ? "; it does not fit this task (est.)" : "") : ""}.${fallbackLine}`;
@@ -148,10 +168,14 @@ export function advise(records: UsageRecord[], taskMix: TokenMix | null, now = D
     fallbackProviderName: fallback?.providerName ?? null,
     recommendationResetsAt,
     confidence,
+    profile,
     rows,
   };
 }
 
-export function limitsBoard(): LimitsBoard {
-  return { generatedAt: new Date().toISOString(), platforms: loadUsageRecords().map(r => buildPlatformLimits(r)), index: indexProgress() };
+// index comes from the caller (indexer.ts) rather than an import here: this
+// module must stay importable from indexer.ts (for the collector-refresh
+// recommendation-switch hook) without creating an import cycle.
+export function limitsBoard(index: LimitsBoard["index"]): LimitsBoard {
+  return { generatedAt: new Date().toISOString(), platforms: loadUsageRecords().map(r => buildPlatformLimits(r)), index };
 }

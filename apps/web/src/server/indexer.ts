@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { Database as SourceDatabase } from "bun:sqlite";
 import { db } from "./db";
 import { redact } from "./redact";
-import { observeUsageRecords } from "./watch";
+import { observeUsageRecords, lastRecommendation, recordRecommendationChange } from "./watch";
+import { advise } from "./limits";
 import { LogEvent, NormalizedSession, UsageRecordV1, type Event, type Session, type UsageRecord } from "../shared/schemas";
 
 const home = process.env.HOME ?? "";
@@ -158,6 +159,12 @@ function refreshUsage() {
   // alerts, and their desktop notifications all flow from what we just read.
   try { void observeUsageRecords(observed); }
   catch (error) { db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(usageDir, "watch", String(error), new Date().toISOString()); }
+  // General-mode recommendation, recomputed on every refresh, feeds the
+  // provider-switch incidents in the Phase 3 incident view.
+  try {
+    const top = advise(observed, null).rows.find(r => r.verdict !== "unavailable");
+    recordRecommendationChange(top ? { providerId: top.providerId, providerName: top.providerName } : null, lastRecommendation());
+  } catch (error) { db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(usageDir, "recommendation", String(error), new Date().toISOString()); }
 }
 
 function indexOpenCode() {

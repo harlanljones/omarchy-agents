@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS limit_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT
 CREATE INDEX IF NOT EXISTS limit_snapshots_cycle ON limit_snapshots(provider, window_label, resets_at, recorded_at);
 CREATE TABLE IF NOT EXISTS usage_alerts (id TEXT PRIMARY KEY, provider TEXT NOT NULL, rule TEXT NOT NULL, window_label TEXT NOT NULL, resets_at TEXT, severity TEXT NOT NULL, message TEXT NOT NULL, fired_at TEXT NOT NULL, resolved_at TEXT, notified_at TEXT, recovery_notified_at TEXT);
 CREATE INDEX IF NOT EXISTS usage_alerts_active ON usage_alerts(resolved_at, fired_at DESC);
+CREATE TABLE IF NOT EXISTS recommendation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, provider_name TEXT NOT NULL, previous_provider TEXT, previous_provider_name TEXT, changed_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS recommendation_log_time ON recommendation_log(changed_at DESC);
 `);
 
 export function json<T>(value: string | null | undefined, fallback: T): T { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } }

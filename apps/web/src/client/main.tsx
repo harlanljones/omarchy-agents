@@ -5,7 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Group } from "@visx/group";
 import { BarStack } from "@visx/shape";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
-import type { AdviceRow, AdviceVerdict, AlertsResponse, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
+import type { AdviceRow, AdviceVerdict, AlertsResponse, IncidentsResponse, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
 import "./styles.css";
 
 type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
@@ -1127,6 +1127,19 @@ const VERDICT_LABEL: Record<AdviceVerdict, string> = {
   unavailable: "Unavailable",
 };
 
+// Mirrors the CAPABILITY_SIGNATURES keys the server matches against a
+// provider's dominant model (apps/web/src/server/prompt-analysis.ts). "tool
+// use" is deliberately absent there — it's assumed universal among agent
+// CLIs — so it stays out of this selectable list too.
+const TASK_CAPABILITIES = ["deep reasoning", "code generation", "low latency", "high reliability"];
+
+const INCIDENT_KIND_LABEL: Record<IncidentsResponse["incidents"][number]["kind"], string> = {
+  threshold: "Threshold",
+  "provider-switch": "Provider switch",
+  "actual-reset": "Actual reset",
+  "forecast-accuracy": "Forecast accuracy",
+};
+
 function AdviceRowView({ row }: { row: AdviceRow }) {
   const tone =
     row.verdict === "recommended" || row.verdict === "usable"
@@ -1140,7 +1153,9 @@ function AdviceRowView({ row }: { row: AdviceRow }) {
       <div className="advice-main">
         <div className="advice-name">
           <strong>{row.providerName}</strong>
-          <Status tone={tone}>{VERDICT_LABEL[row.verdict]}</Status>
+          <Status tone={row.excludedByProfile ? "error" : tone}>
+            {row.excludedByProfile ? "Excluded by profile" : VERDICT_LABEL[row.verdict]}
+          </Status>
           {row.estCostUsd != null && (
             <b className="cost">≈${row.estCostUsd.toFixed(2)}</b>
           )}
@@ -1165,8 +1180,11 @@ function LimitsBoardView() {
     [overrideError, setOverrideError] = useState(""),
     [task, setTask] = useState<"" | "small" | "medium" | "large">(""),
     [custom, setCustom] = useState({ input: "", output: "", cacheRead: "" }),
+    [capabilities, setCapabilities] = useState<string[]>([]),
+    [preferredProviders, setPreferredProviders] = useState<string[]>([]),
     [sortRisk, setSortRisk] = useState(true),
     [advice, setAdvice] = useState<{ verdictLine: string; generatedAt: string; rows: AdviceRow[]; fallbackProviderName: string | null; recommendationResetsAt: string | null; confidence: "high" | "medium" | "low" } | null>(null),
+    [incidents, setIncidents] = useState<IncidentsResponse | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [reload, setReload] = useState(0),
@@ -1199,6 +1217,9 @@ function LimitsBoardView() {
     api<AlertsResponse>("/limits/api/alerts")
       .then(setAlerts)
       .catch(() => setAlerts(null));
+    api<IncidentsResponse>("/limits/api/incidents")
+      .then(setIncidents)
+      .catch(() => setIncidents(null));
     api<{ entries: PricingEntry[]; overrideError: string | null }>("/limits/api/pricing")
       .then((p) => {
         setPricing(p.entries);
@@ -1214,6 +1235,8 @@ function LimitsBoardView() {
       params.set("output", custom.output);
       params.set("cache", custom.cacheRead);
     }
+    if (capabilities.length) params.set("capabilities", capabilities.join(","));
+    if (preferredProviders.length) params.set("prefer", preferredProviders.join(","));
     api<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] }>(
       `/limits/api/advice${params.size ? `?${params}` : ""}`,
     )
@@ -1223,7 +1246,7 @@ function LimitsBoardView() {
         setCopyState("idle");
       })
       .catch(() => setAdvice(null));
-  }, [task, custom, reload]);
+  }, [task, custom, capabilities, preferredProviders, reload]);
   const platforms = useMemo(() => {
     const rows = [...(board?.platforms ?? [])];
     if (!sortRisk) return rows;
@@ -1336,6 +1359,47 @@ function LimitsBoardView() {
               <label>Cache read <input inputMode="numeric" value={custom.cacheRead} placeholder="tokens" onChange={(e) => { setTask(""); setCustom({ ...custom, cacheRead: e.target.value.replace(/[^0-9]/g, "") }); }} /></label>
               {Object.values(custom).some(Boolean) && <button className="text-button" onClick={() => setCustom({ input: "", output: "", cacheRead: "" })}>Clear custom</button>}
             </div>
+            <div className="profile-controls" aria-label="Task profile">
+              <fieldset className="profile-capabilities">
+                <legend>Required capabilities</legend>
+                {TASK_CAPABILITIES.map((cap) => (
+                  <label key={cap}>
+                    <input
+                      type="checkbox"
+                      checked={capabilities.includes(cap)}
+                      onChange={() =>
+                        setCapabilities((prev) =>
+                          prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap],
+                        )
+                      }
+                    />
+                    {cap}
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="profile-providers">
+                <legend>Preferred providers</legend>
+                {platforms.length ? platforms.map((p) => (
+                  <label key={p.providerId}>
+                    <input
+                      type="checkbox"
+                      checked={preferredProviders.includes(p.providerId)}
+                      onChange={() =>
+                        setPreferredProviders((prev) =>
+                          prev.includes(p.providerId) ? prev.filter((id) => id !== p.providerId) : [...prev, p.providerId],
+                        )
+                      }
+                    />
+                    {p.providerName}
+                  </label>
+                )) : <small className="muted">No platforms reporting yet</small>}
+              </fieldset>
+              {(capabilities.length > 0 || preferredProviders.length > 0) && (
+                <button className="text-button" onClick={() => { setCapabilities([]); setPreferredProviders([]); }}>
+                  Clear task profile
+                </button>
+              )}
+            </div>
             <div className="routing-receipt" aria-label="Current routing brief">
               <div className="routing-leg">
                 <span>Next route</span>
@@ -1407,6 +1471,27 @@ function LimitsBoardView() {
                 </ol>
               </details>
             )}
+          </section>
+          <section>
+            <div className="section-title">
+              <h2>Incident timeline</h2>
+              <span>threshold crossings, recommendation switches, actual resets, and forecast accuracy</span>
+            </div>
+            <ol className="reset-timeline">
+              {(incidents?.incidents ?? []).map((incident) => (
+                <li key={incident.id}>
+                  <strong>{incident.providerName}</strong>
+                  <span>{incident.detail}</span>
+                  <Status tone={incident.kind === "threshold" ? "warn" : "ok"}>
+                    {INCIDENT_KIND_LABEL[incident.kind]}
+                  </Status>
+                </li>
+              ))}
+              {incidents && !incidents.incidents.length && (
+                <li className="muted">No incidents recorded yet.</li>
+              )}
+              {!incidents && <li className="muted">Loading incident history…</li>}
+            </ol>
           </section>
           <section>
             <div className="section-title">

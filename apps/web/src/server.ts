@@ -8,7 +8,8 @@ import { rank } from "./server/ranking";
 import { runIndex, indexProgress, startWatching } from "./server/indexer";
 import { chatStream, modelHealth, runNightly } from "./server/analyst";
 import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/limits";
-import { alertsInbox } from "./server/watch";
+import { alertsInbox, incidentsView } from "./server/watch";
+import type { TaskProfile } from "./shared/schemas";
 import { effectivePricingTable, pricingOverrideError } from "./server/pricing";
 import { UsageRecordV1 } from "./shared/schemas";
 import { analyzePrompt } from "./server/prompt-analysis";
@@ -59,8 +60,9 @@ app.get("/api/overview", c => {
   }
   return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: ["claude", "codex", "opencode"].includes(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
 });
-app.get("/limits/api/board", c => c.json(limitsBoard()));
+app.get("/limits/api/board", c => c.json(limitsBoard(indexProgress())));
 app.get("/limits/api/alerts", c => c.json(alertsInbox()));
+app.get("/limits/api/incidents", c => c.json(incidentsView()));
 app.get("/limits/api/advice", c => {
   const task = c.req.query("task") ?? "";
   const explicit = { input: Number(c.req.query("input")), output: Number(c.req.query("output")), cacheRead: Number(c.req.query("cache")) };
@@ -68,7 +70,10 @@ app.get("/limits/api/advice", c => {
   if (task in TASK_PRESETS) mix = TASK_PRESETS[task];
   else if ([explicit.input, explicit.output, explicit.cacheRead].every(n => Number.isFinite(n) && n >= 0)) mix = explicit;
   else if (task || c.req.query("input")) return c.json({ error: "task must be small, medium, or large, or pass input/output/cache token counts" }, 400);
-  return c.json(advise(loadUsageRecords(), mix));
+  const capabilities = (c.req.query("capabilities") ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  const preferredProviders = (c.req.query("prefer") ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  const profile: TaskProfile | null = capabilities.length || preferredProviders.length ? { requiredCapabilities: capabilities, preferredProviders } : null;
+  return c.json(advise(loadUsageRecords(), mix, Date.now(), profile));
 });
 app.get("/limits/api/pricing", c => c.json({ asOfNote: "Reference API rates; override via ~/.config/omarchy-agents/pricing.json", overrideError: pricingOverrideError(), entries: effectivePricingTable() }));
 app.get("/limits/api/productivity", c => {

@@ -23,6 +23,7 @@ const wipe = () => {
   const { db } = require("../src/server/db");
   db.run("DELETE FROM limit_snapshots");
   db.run("DELETE FROM usage_alerts");
+  db.run("DELETE FROM recommendation_log");
 };
 
 /** Notifier stub: records deliveries; fails while `failing` is true. */
@@ -215,6 +216,73 @@ describe("depletion forecasting", () => {
     const inbox = watch.alertsInbox([openEnded], NOW);
     expect(inbox.forecasts.map(f => f.sufficient)).toEqual([false]);
     expect(inbox.active.map(a => a.rule).sort()).toEqual(["threshold-10", "threshold-20"]);
+  });
+});
+
+describe("incident view (Phase 3)", () => {
+  test("provider switches log only real transitions", () => {
+    wipe();
+    expect(watch.lastRecommendation()).toBeNull();
+    expect(watch.recordRecommendationChange({ providerId: "claude", providerName: "Claude Code" }, watch.lastRecommendation(), NOW)).toBe(true);
+    expect(watch.recordRecommendationChange({ providerId: "claude", providerName: "Claude Code" }, watch.lastRecommendation(), NOW + 1000)).toBe(false);
+    expect(watch.recordRecommendationChange({ providerId: "codex", providerName: "Codex" }, watch.lastRecommendation(), NOW + 2000)).toBe(true);
+    expect(watch.lastRecommendation()).toEqual({ providerId: "codex", providerName: "Codex" });
+    const inbox = watch.incidentsView([], NOW + 3000);
+    const switches = inbox.incidents.filter(i => i.kind === "provider-switch");
+    expect(switches).toHaveLength(2);
+    expect(switches[0].summary).toContain("moved from Claude Code to Codex");
+  });
+
+  test("actual resets are detected from a sharp usage drop between snapshots", async () => {
+    wipe();
+    const spy = spyNotifier();
+    await watch.observeUsageRecords([claudeAt(0.9)], NOW, spy.notify);
+    await watch.observeUsageRecords([claudeAt(0.05)], NOW + 3600_000, spy.notify);
+    const resets = watch.actualResets();
+    expect(resets).toHaveLength(1);
+    expect(resets[0].providerId).toBe("claude");
+    expect(resets[0].fromUsed).toBe(0.9);
+    expect(resets[0].toUsed).toBe(0.05);
+    const inbox = watch.incidentsView([], NOW + 3600_000);
+    expect(inbox.incidents.some(i => i.kind === "actual-reset")).toBe(true);
+  });
+
+  test("a gradual decline under the drop threshold is not mistaken for a reset", async () => {
+    wipe();
+    const spy = spyNotifier();
+    await watch.observeUsageRecords([claudeAt(0.5)], NOW, spy.notify);
+    await watch.observeUsageRecords([claudeAt(0.3)], NOW + 3600_000, spy.notify);
+    expect(watch.actualResets()).toHaveLength(0);
+  });
+
+  test("forecast accuracy compares an early two-sample projection against actual exhaustion", async () => {
+    wipe();
+    const spy = spyNotifier();
+    const cycleReset = hoursFromNow(100);
+    await watch.observeUsageRecords([claudeAt(0.5, cycleReset)], NOW, spy.notify);
+    await watch.observeUsageRecords([claudeAt(0.6, cycleReset)], NOW + 3600_000, spy.notify);
+    await watch.observeUsageRecords([claudeAt(1, cycleReset)], NOW + 4 * 3600_000, spy.notify);
+    const accuracy = watch.forecastAccuracy();
+    expect(accuracy).toHaveLength(1);
+    expect(accuracy[0].providerId).toBe("claude");
+    expect(accuracy[0].actualExhaustionAt).toBe(hoursFromNow(4));
+    expect(accuracy[0].predictedExhaustionAt).toBeTruthy();
+    expect(accuracy[0].driftMs).not.toBeNull();
+    const inbox = watch.incidentsView([], NOW + 4 * 3600_000);
+    expect(inbox.incidents.some(i => i.kind === "forecast-accuracy")).toBe(true);
+  });
+
+  test("incidents merge threshold crossings, switches, resets, and accuracy in one recency-ordered feed", async () => {
+    wipe();
+    const spy = spyNotifier();
+    await watch.observeUsageRecords([claudeAt(0.85)], NOW, spy.notify);
+    watch.recordRecommendationChange({ providerId: "claude", providerName: "Claude Code" }, null, NOW + 500);
+    const inbox = watch.incidentsView([claudeAt(0.85)], NOW + 1000);
+    const kinds = new Set(inbox.incidents.map(i => i.kind));
+    expect(kinds.has("threshold")).toBe(true);
+    expect(kinds.has("provider-switch")).toBe(true);
+    const times = inbox.incidents.map(i => i.occurredAt);
+    expect([...times]).toEqual([...times].sort().reverse());
   });
 });
 

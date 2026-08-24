@@ -1524,6 +1524,41 @@ select {
   border-radius: 3px;
   font: 12px "IBM Plex Mono";
 }
+.profile-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-top: 12px;
+}
+.profile-controls fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.profile-controls legend {
+  width: 100%;
+  color: var(--dim);
+  font: 10px "IBM Plex Mono";
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.profile-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--base);
+  font: 12px "IBM Plex Mono";
+  white-space: nowrap;
+}
+.profile-controls input[type="checkbox"] {
+  width: auto;
+}
 .routing-receipt {
   grid-column: 1 / -1;
   display: grid;

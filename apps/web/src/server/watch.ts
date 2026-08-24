@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { db } from "./db";
-import type { AlertRule, AlertSeverity, AlertView, AlertsResponse, ForecastView, LimitKind, LimitWindowView, PlatformStatus, UsageRecord } from "../shared/schemas";
+import type { AlertRule, AlertSeverity, AlertView, AlertsResponse, ForecastView, IncidentView, IncidentsResponse, LimitKind, LimitWindowView, PlatformStatus, UsageRecord } from "../shared/schemas";
 
 // Observation primitives shared by the limits board (limits.ts) and the
 // indexer's collector-refresh hook. This module must not import limits.ts or
@@ -234,4 +234,119 @@ export function alertsInbox(records?: UsageRecord[], now = Date.now()): AlertsRe
     recent: (db.query("SELECT * FROM usage_alerts WHERE resolved_at IS NOT NULL ORDER BY resolved_at DESC LIMIT 50").all() as any[]).map(view),
     forecasts: forecastsFor(current, now),
   };
+}
+
+// Provider-switch tracking (Phase 3 incident view). Callers with routing
+// authority (advise() in limits.ts, via the indexer's collector-refresh hook)
+// report who the top recommendation is; we only persist real transitions.
+export type RecommendedProvider = { providerId: string; providerName: string };
+
+export function lastRecommendation(): RecommendedProvider | null {
+  const row = db.query("SELECT provider,provider_name FROM recommendation_log ORDER BY id DESC LIMIT 1").get() as any;
+  return row ? { providerId: row.provider, providerName: row.provider_name } : null;
+}
+
+export function recordRecommendationChange(current: RecommendedProvider | null, previous: RecommendedProvider | null, now = Date.now()): boolean {
+  if (current?.providerId === previous?.providerId) return false;
+  db.query("INSERT INTO recommendation_log(provider,provider_name,previous_provider,previous_provider_name,changed_at) VALUES (?,?,?,?,?)")
+    .run(current?.providerId ?? "none", current?.providerName ?? "None ready", previous?.providerId ?? null, previous?.providerName ?? null, new Date(now).toISOString());
+  return true;
+}
+
+type SnapshotRow = { provider: string; window_label: string; window_kind: LimitKind; resets_at: string | null; used: number; recorded_at: string };
+export type ActualReset = { providerId: string; windowLabel: string; windowKind: LimitKind; occurredAt: string; predictedResetsAt: string | null; driftMs: number | null; fromUsed: number; toUsed: number };
+
+// A window's usage does not count down; it only resets. A sharp drop between
+// consecutive snapshots is the observable signature of that reset actually
+// happening, independent of whatever resetsAt the collector predicted.
+const RESET_DROP_THRESHOLD = 0.3;
+
+export function actualResets(limit = 50): ActualReset[] {
+  const rows = db.query("SELECT provider,window_label,window_kind,resets_at,used,recorded_at FROM limit_snapshots ORDER BY provider,window_label,recorded_at").all() as SnapshotRow[];
+  const out: ActualReset[] = [];
+  const prevByKey = new Map<string, SnapshotRow>();
+  for (const row of rows) {
+    const key = `${row.provider} ${row.window_label}`;
+    const prev = prevByKey.get(key);
+    if (prev && row.used < prev.used - RESET_DROP_THRESHOLD) {
+      const driftMs = prev.resets_at ? new Date(row.recorded_at).valueOf() - new Date(prev.resets_at).valueOf() : null;
+      out.push({ providerId: row.provider, windowLabel: row.window_label, windowKind: row.window_kind, occurredAt: row.recorded_at, predictedResetsAt: prev.resets_at, driftMs, fromUsed: prev.used, toUsed: row.used });
+    }
+    prevByKey.set(key, row);
+  }
+  return out.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, limit);
+}
+
+export type ForecastAccuracy = { providerId: string; windowLabel: string; windowKind: LimitKind; predictedExhaustionAt: string | null; actualExhaustionAt: string; driftMs: number | null };
+
+// Re-derives what forecastsFor() would have projected from only the first two
+// samples of a reset cycle, then compares that early call against the sample
+// where usage actually reached 100% in the same cycle.
+export function forecastAccuracy(limit = 50): ForecastAccuracy[] {
+  const rows = db.query("SELECT provider,window_label,window_kind,resets_at,used,recorded_at FROM limit_snapshots ORDER BY provider,window_label,resets_at,recorded_at").all() as SnapshotRow[];
+  const cycles = new Map<string, SnapshotRow[]>();
+  for (const row of rows) {
+    const key = `${row.provider} ${row.window_label} ${row.resets_at ?? ""}`;
+    const bucket = cycles.get(key);
+    if (bucket) bucket.push(row); else cycles.set(key, [row]);
+  }
+  const out: ForecastAccuracy[] = [];
+  for (const samples of cycles.values()) {
+    const exhaustedIndex = samples.findIndex(s => s.used >= 1);
+    if (exhaustedIndex < 2) continue;
+    const [firstRow, secondRow] = samples;
+    const spanMs = new Date(secondRow.recorded_at).valueOf() - new Date(firstRow.recorded_at).valueOf();
+    if (!(spanMs > 0)) continue;
+    const ratePerMs = (secondRow.used - firstRow.used) / spanMs;
+    if (!(ratePerMs > 0)) continue;
+    const predictedMs = new Date(secondRow.recorded_at).valueOf() + (1 - secondRow.used) / ratePerMs;
+    const actual = samples[exhaustedIndex];
+    out.push({
+      providerId: actual.provider, windowLabel: actual.window_label, windowKind: actual.window_kind,
+      predictedExhaustionAt: new Date(predictedMs).toISOString(), actualExhaustionAt: actual.recorded_at,
+      driftMs: new Date(actual.recorded_at).valueOf() - predictedMs,
+    });
+  }
+  return out.sort((a, b) => b.actualExhaustionAt.localeCompare(a.actualExhaustionAt)).slice(0, limit);
+}
+
+export function incidentsView(records?: UsageRecord[], now = Date.now(), limit = 100): IncidentsResponse {
+  const current = records ?? (db.query("SELECT record_json FROM usage_records").all() as any[])
+    .flatMap(row => { try { return [JSON.parse(row.record_json) as UsageRecord]; } catch { return []; } });
+  const names = new Map(current.map(r => [r.id, r.name ?? r.id] as const));
+  const nameOf = (id: string) => names.get(id) ?? id;
+
+  const inbox = alertsInbox(current, now);
+  const thresholds: IncidentView[] = [...inbox.active, ...inbox.recent]
+    .filter(a => a.rule !== "collector-stale" && a.rule !== "auth-needed")
+    .map(a => ({ id: `threshold:${a.id}`, kind: "threshold", occurredAt: a.firedAt, providerId: a.providerId, providerName: a.providerName, summary: `${a.rule} · ${a.providerName}`, detail: a.message }));
+
+  const switches: IncidentView[] = (db.query("SELECT * FROM recommendation_log ORDER BY id DESC LIMIT ?").all(limit) as any[])
+    .map(row => ({
+      id: `switch:${row.id}`, kind: "provider-switch" as const, occurredAt: row.changed_at,
+      providerId: row.provider === "none" ? null : row.provider, providerName: row.provider_name,
+      summary: row.previous_provider ? `Recommendation moved from ${row.previous_provider_name} to ${row.provider_name}` : `${row.provider_name} became the recommendation`,
+      detail: row.previous_provider ? `Top platform switched from ${row.previous_provider_name} to ${row.provider_name}.` : "No prior recommendation on record.",
+    }));
+
+  const resets: IncidentView[] = actualResets(limit).map(r => ({
+    id: `reset:${r.providerId}:${r.windowLabel}:${r.occurredAt}`, kind: "actual-reset", occurredAt: r.occurredAt,
+    providerId: r.providerId, providerName: nameOf(r.providerId),
+    summary: `${r.windowLabel} reset (${Math.round(r.fromUsed * 100)}% → ${Math.round(r.toUsed * 100)}%)`,
+    detail: r.predictedResetsAt
+      ? `Predicted reset at ${new Date(r.predictedResetsAt).toLocaleString()}; observed ${formatDuration(Math.abs(r.driftMs ?? 0))} ${(r.driftMs ?? 0) > 0 ? "after" : "before"} prediction.`
+      : "No predicted reset time on record for comparison.",
+  }));
+
+  const accuracy: IncidentView[] = forecastAccuracy(limit).map(f => ({
+    id: `forecast:${f.providerId}:${f.windowLabel}:${f.actualExhaustionAt}`, kind: "forecast-accuracy", occurredAt: f.actualExhaustionAt,
+    providerId: f.providerId, providerName: nameOf(f.providerId),
+    summary: `${f.windowLabel} exhaustion forecast drift ${formatDuration(Math.abs(f.driftMs ?? 0))}`,
+    detail: `Projected exhaustion ${f.predictedExhaustionAt ? new Date(f.predictedExhaustionAt).toLocaleString() : "unknown"}; actual ${new Date(f.actualExhaustionAt).toLocaleString()}.`,
+  }));
+
+  const incidents = [...thresholds, ...switches, ...resets, ...accuracy]
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+    .slice(0, limit);
+  return { generatedAt: new Date(now).toISOString(), incidents };
 }

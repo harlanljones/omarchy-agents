@@ -83,12 +83,14 @@ export type LimitsBoard = {
   index: { state: string, scanned: number, indexed: number, total: number, current: string, startedAt: string, finishedAt: string, errors: number }
 };
 export type AdviceVerdict = "recommended" | "usable" | "tight" | "wait" | "unavailable";
+export type TaskProfile = { requiredCapabilities: string[], preferredProviders: string[] };
 export type AdviceRow = {
   providerId: string, providerName: string,
   verdict: AdviceVerdict, score: number,
   headroom: number | null, fitsTask: boolean | null,
   estCostUsd: number | null, unpricedModels: string[],
-  reasons: string[], bindingResetsAt: string | null
+  reasons: string[], bindingResetsAt: string | null,
+  excludedByProfile: boolean
 };
 export type AdviceResponse = {
   generatedAt: string, mode: "general" | "task", verdictLine: string,
@@ -96,6 +98,7 @@ export type AdviceResponse = {
   fallbackProviderId: string | null, fallbackProviderName: string | null,
   recommendationResetsAt: string | null,
   confidence: "high" | "medium" | "low",
+  profile: TaskProfile | null,
   rows: AdviceRow[]
 };
 export type PricingSource = "built-in" | "override";
@@ -115,6 +118,13 @@ export type ForecastView = {
 export type AlertsResponse = {
   generatedAt: string, active: AlertView[], recent: AlertView[], forecasts: ForecastView[]
 };
+export type IncidentKind = "threshold" | "provider-switch" | "actual-reset" | "forecast-accuracy";
+export type IncidentView = {
+  id: string, kind: IncidentKind, occurredAt: string,
+  providerId: string | null, providerName: string,
+  summary: string, detail: string
+};
+export type IncidentsResponse = { generatedAt: string, incidents: IncidentView[] };
 export type PricingEntry = {
   model: string, match: string,
   inputPerMtok: number, outputPerMtok: number,

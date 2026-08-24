@@ -38,21 +38,36 @@ function complexity(text: string, metadata: { toolCount?: number; tokenInput?: n
   return { dimensions, score, level, requiredCapabilities, unknowns, warnings };
 }
 
+// Shared with limits.ts: which model-name substrings signal a capability, so
+// task-profile routing (Phase 3) and prompt-based model fit agree on what
+// "deep reasoning" or "low latency" mean. Capabilities absent from this table
+// (e.g. "tool use", assumed universal among agent CLIs) never exclude a model.
+export const CAPABILITY_SIGNATURES: Record<string, string[]> = {
+  "deep reasoning": ["opus", "gpt-5", "reason", "qwen3"],
+  "code generation": ["codex", "coder", "code", "deepseek"],
+  "low latency": ["haiku", "flash", "mini", "small", "7b"],
+  "high reliability": ["opus", "gpt-5", "sonnet"],
+};
+export function modelMatchesCapability(model: string, capability: string): boolean {
+  const signature = CAPABILITY_SIGNATURES[capability];
+  return signature ? hasAny(model.toLowerCase(), signature) : true;
+}
+
 function modelFit(model: string, analysis: ReturnType<typeof complexity>) {
   const lower = model.toLowerCase();
   const reasons: string[] = [];
   let fit = 50;
   if (analysis.requiredCapabilities.includes("deep reasoning")) {
-    if (hasAny(lower, ["opus", "gpt-5", "reason", "qwen3"])) { fit += 25; reasons.push("strong reasoning family"); }
+    if (hasAny(lower, CAPABILITY_SIGNATURES["deep reasoning"])) { fit += 25; reasons.push("strong reasoning family"); }
     else { fit -= 18; reasons.push("reasoning capability is uncertain"); }
   }
   if (analysis.requiredCapabilities.includes("code generation")) {
-    if (hasAny(lower, ["codex", "coder", "code", "deepseek"])) { fit += 20; reasons.push("code-oriented model"); }
+    if (hasAny(lower, CAPABILITY_SIGNATURES["code generation"])) { fit += 20; reasons.push("code-oriented model"); }
     else reasons.push("code specialization is not confirmed");
   }
-  if (analysis.requiredCapabilities.includes("low latency") && hasAny(lower, ["haiku", "flash", "mini", "small", "7b"])) { fit += 15; reasons.push("smaller/fast model family"); }
-  if (analysis.requiredCapabilities.includes("high reliability") && hasAny(lower, ["opus", "gpt-5", "sonnet"])) { fit += 12; reasons.push("reliability-oriented tier"); }
-  if (hasAny(lower, ["haiku", "flash", "mini", "small", "7b"]) && analysis.level === "high") { fit -= 20; reasons.push("may underperform on high-complexity work"); }
+  if (analysis.requiredCapabilities.includes("low latency") && hasAny(lower, CAPABILITY_SIGNATURES["low latency"])) { fit += 15; reasons.push("smaller/fast model family"); }
+  if (analysis.requiredCapabilities.includes("high reliability") && hasAny(lower, CAPABILITY_SIGNATURES["high reliability"])) { fit += 12; reasons.push("reliability-oriented tier"); }
+  if (hasAny(lower, CAPABILITY_SIGNATURES["low latency"]) && analysis.level === "high") { fit -= 20; reasons.push("may underperform on high-complexity work"); }
   return { fit: clamp(fit), rationale: reasons.join("; ") || "capability evidence is limited" };
 }
 
