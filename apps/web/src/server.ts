@@ -9,6 +9,7 @@ import { chatStream, modelHealth, runNightly } from "./server/analyst";
 import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/limits";
 import { effectivePricingTable, pricingOverrideError } from "./server/pricing";
 import { UsageRecordV1 } from "./shared/schemas";
+import { analyzePrompt } from "./server/prompt-analysis";
 
 const app = new Hono(); app.use("*", security);
 app.use("/limits", requireAdmin);
@@ -72,6 +73,25 @@ app.get("/api/timeseries", c => { const rawDays = Number(c.req.query("days") ?? 
 app.get("/api/sessions", c => { const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50))), offset = Math.max(0, Number(c.req.query("offset") ?? 0)); const clauses: string[] = [], args: any[] = []; for (const key of ["provider", "model", "project"] as const) if (c.req.query(key)) { clauses.push(`${key} LIKE ?`); args.push(`%${c.req.query(key)}%`); } if (c.req.query("errors") === "true") clauses.push("error_count>0"); const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""; const rows = db.query(`SELECT id,provider,model,project,title,started_at startedAt,ended_at endedAt,token_input tokenInput,token_output tokenOutput,cache_read cacheRead,cache_write cacheWrite,error_count errorCount,tool_count toolCount FROM sessions ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`).all(...args, limit, offset); const total = (db.query(`SELECT COUNT(*) total FROM sessions ${where}`).get(...args) as any).total; return c.json({ rows, total, limit, offset }); });
 app.get("/api/sessions/:id/events", c => { const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 100))), offset = Math.max(0, Number(c.req.query("offset") ?? 0)); return c.json({ rows: db.query("SELECT id,session_id sessionId,ordinal,kind,timestamp,text,tool_name toolName,source_locator sourceLocator FROM events WHERE session_id=? ORDER BY ordinal LIMIT ? OFFSET ?").all(c.req.param("id"), limit, offset), limit, offset }); });
 app.get("/api/reports", c => c.json({ rows: (db.query("SELECT * FROM reports ORDER BY created_at DESC LIMIT 50").all() as any[]).map(r => ({ id: r.id, createdAt: r.created_at, periodStart: r.period_start, periodEnd: r.period_end, model: r.model, summary: r.summary, detectors: json(r.detectors_json, []), suggestions: (db.query("SELECT * FROM suggestions WHERE report_id=?").all(r.id) as any[]).map(s => ({ ...s, evidence: json(s.evidence_json, []) })) })) }));
+app.post("/api/prompt-analysis", async c => {
+  const body = await c.req.json().catch(() => null) as any;
+  const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
+  let prompt = typeof body?.prompt === "string" ? body.prompt : "";
+  let source: "prompt" | "session" = "prompt";
+  let metadata: { toolCount?: number; tokenInput?: number } = {};
+  if (sessionId) {
+    const session = db.query("SELECT model,token_input,tool_count FROM sessions WHERE id=?").get(sessionId) as any;
+    const event = db.query("SELECT text FROM events WHERE session_id=? AND kind='prompt' ORDER BY ordinal LIMIT 1").get(sessionId) as any;
+    if (!session || !event) return c.json({ error: "Session or prompt evidence not found" }, 404);
+    prompt = String(event.text ?? ""); source = "session";
+    metadata = { toolCount: Number(session.tool_count ?? 0), tokenInput: Number(session.token_input ?? 0) };
+  }
+  if (!prompt.trim() || prompt.length > 8000) return c.json({ error: "Provide a prompt between 1 and 8,000 characters or a valid sessionId" }, 400);
+  const models = (db.query("SELECT model,provider FROM sessions WHERE model IS NOT NULL AND trim(model) <> '' GROUP BY model,provider ORDER BY model").all() as Array<{ model: string; provider: string }>).map(row => ({ model: row.model, provider: row.provider }));
+  const configured = [process.env.OLLAMA_MODEL, process.env.OLLAMA_FALLBACK_MODEL].filter((model): model is string => Boolean(model)).map(model => ({ model, provider: "ollama" }));
+  const candidates = [...new Map([...models, ...configured].map(candidate => [candidate.model.toLowerCase(), candidate])).values()];
+  return c.json(analyzePrompt(prompt, candidates, source, metadata));
+});
 app.post("/api/agent/chat", async c => { const body = await c.req.json(); if (typeof body?.message !== "string" || !body.message.trim() || body.message.length > 8000) return c.json({ error: "A message between 1 and 8,000 characters is required" }, 400); db.query("INSERT INTO chats VALUES (?,?,?,?,?)").run(randomUUID(), "user", body.message, "[]", new Date().toISOString()); return new Response(chatStream(body.message), { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } }); });
 app.post("/api/analysis/run", async c => c.json(await runNightly(), 202));
 app.post("/api/refresh", async c => { const child = Bun.spawn([`${process.env.HOME}/.local/bin/omarchy-agent-usage-update`, "--force"], { stdout: "ignore", stderr: "ignore" }); void child.exited.then(() => runIndex()); return c.json({ started: true }, 202); });

@@ -105,3 +105,11 @@ export type PricingEntry = {
   cacheReadPerMtok: number, cacheWritePerMtok: number,
   currency: string, asOf: string, source: PricingSource
 };
+export type PromptComplexity = "low" | "medium" | "high";
+export type PromptAnalysis = {
+  redactedPrompt: string, complexity: PromptComplexity, score: number,
+  dimensions: Array<{ name: string, score: number, evidence: string }>,
+  requiredCapabilities: string[], unknowns: string[], warnings: string[],
+  recommendations: Array<{ model: string, provider: string | null, fit: "recommended" | "fallback" | "caution", rationale: string, estimatedCostUsd: number | null, estimatedLatencyMs: number | null, confidence: "high" | "medium" | "low" }>,
+  source: "prompt" | "session", analyzedAt: string
+};

@@ -8,7 +8,15 @@ This app is developed from the workspace root. Use `bun run dev --filter=@omarch
 
 ![Web dashboard showing provider standings, source coverage, and the local analyst rail](../../docs/screenshots/dashboard.png)
 
+![Prompt analysis showing complexity and model recommendations](../../docs/screenshots/prompt-analysis.png)
+
+![Prompt analysis with expanded complexity evidence](../../docs/screenshots/prompt-analysis-evidence.png)
+
 The dashboard combines local usage indexing, provider comparisons, transcript evidence, and the citation-bound analyst in one view.
+
+### Prompt analysis
+
+The Analyst page includes a local, advisory prompt analyzer. Paste a prompt or provide an indexed session ID; the analyzer redacts secrets, scores context size, reasoning depth, tool orchestration, code-change scope, reliability risk, and latency sensitivity, then ranks available models/providers as recommended, fallback, or caution. Results include capability evidence, known API cost, estimated latency, confidence, unknowns, and warnings when requirements conflict. It never changes agent configuration automatically.
 
 ## Local setup
 

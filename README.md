@@ -2,7 +2,7 @@
 
 Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https://omarchy.org).
 
-- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. A Cloudflare Access–gated limits portal ranks session, weekly, and monthly allowances across subscriptions, counts down to each refresh, prices tasks at reference API rates, and recommends which platform to run next. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
+- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. A Cloudflare Access–gated limits portal ranks session, weekly, and monthly allowances across subscriptions, counts down to each refresh, prices tasks at reference API rates, and recommends which platform to run next. The Analyst page also provides local prompt analysis: it scores task complexity, explains required capabilities, and compares model/provider cost, latency, confidence, and fallback fit without changing configuration. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
 - **Agent leaderboard** (`apps/omarchy-agent-leaderboard`) — Omarchy bar widget ranking token usage across every coding agent on the machine. Forked from `mustafaokur.agent-leaderboard` (MIT).
 - **Agent usage** (`apps/omarchy-agent-usage`) — fork of Omarchy's first-party Agents widget focused on per-provider usage and limits.
 - **Provider assets** (`packages/provider-assets`) — single source for provider marks; each app consumes them through a repository-relative symlink, and plugin builds dereference the link so deployed plugin directories stay self-contained.
@@ -25,6 +25,16 @@ Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https
         <br><sub>Agent Leaderboard bar widget</sub>
       </td>
     </tr>
+    <tr>
+      <td align="center">
+        <img src="docs/screenshots/prompt-analysis.png" alt="Prompt analysis showing task complexity and model recommendations" width="600">
+        <br><sub>Prompt analysis — complexity, model fit, cost, and latency</sub>
+      </td>
+      <td align="center">
+        <img src="docs/screenshots/prompt-analysis-evidence.png" alt="Prompt analysis with expanded complexity evidence" width="600">
+        <br><sub>Prompt analysis — expanded evidence and uncertainty</sub>
+      </td>
+    </tr>
   </table>
 </p>
 
@@ -43,6 +53,8 @@ bun run dev --filter=@omarchy-agents/web
 ```
 
 The dashboard serves `http://127.0.0.1:4317`. It indexes local Claude, Codex, Cline, Antigravity, OpenCode, Fireworks, and usage-collector stores; secret-like content is redacted before anything is persisted.
+
+On the Analyst page, paste a prompt or enter an indexed session ID to run the prompt analyzer. It reports low/medium/high complexity across context, reasoning, tool use, code scope, reliability, and latency; recommendations are advisory and only use known pricing. Unknown model pricing, missing context, and conflicting requirements are shown explicitly.
 
 To install the bar widgets locally:
 

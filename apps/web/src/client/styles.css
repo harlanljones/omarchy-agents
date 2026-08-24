@@ -1361,6 +1361,68 @@ select {
   padding: 1px 5px;
   border-radius: 4px;
 }
+.prompt-analysis {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.prompt-analysis > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.prompt-analysis h3 { margin: 0; font-size: 14px; }
+.prompt-analysis header p { margin: 4px 0 0; color: var(--dim); font-size: 11px; }
+.prompt-analysis textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 10px;
+  color: var(--base);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 12px/1.5 "IBM Plex Mono";
+  resize: vertical;
+}
+.analysis-session {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+  color: var(--dim);
+  font: 10px "IBM Plex Mono";
+  text-transform: uppercase;
+}
+.analysis-session input {
+  max-width: 520px;
+  padding: 8px;
+  color: var(--base);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 12px "IBM Plex Mono";
+}
+.prompt-recommendations { margin-top: 12px; border-top: 1px solid var(--line); }
+.prompt-recommendation {
+  display: grid;
+  grid-template-columns: minmax(120px, .7fr) auto minmax(180px, 1.5fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.prompt-recommendation span { color: var(--muted); }
+.prompt-recommendation b { font: 12px "IBM Plex Mono"; white-space: nowrap; }
+.prompt-analysis details { margin-top: 12px; color: var(--muted); font-size: 12px; }
+.prompt-analysis details p { margin: 7px 0; }
+@media (max-width: 720px) {
+  .prompt-recommendation { grid-template-columns: 1fr auto; }
+  .prompt-recommendation span { grid-column: 1 / -1; }
+}
 .limits-link {
   display: inline-flex;
   align-items: center;

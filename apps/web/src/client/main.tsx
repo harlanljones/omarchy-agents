@@ -907,7 +907,12 @@ function Analyst({ compact = false }: { compact?: boolean }) {
   const [reports, setReports] = useState<any[]>([]),
     [input, setInput] = useState(""),
     [messages, setMessages] = useState<any[]>([]),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [analysisPrompt, setAnalysisPrompt] = useState(""),
+    [analysisSessionId, setAnalysisSessionId] = useState(""),
+    [promptAnalysis, setPromptAnalysis] = useState<any>(null),
+    [analysisBusy, setAnalysisBusy] = useState(false),
+    [analysisError, setAnalysisError] = useState("");
   const load = async () => {
     try {
       const result = await api<any>("/api/reports");
@@ -968,6 +973,14 @@ function Analyst({ compact = false }: { compact?: boolean }) {
     }
   }
   const report = reports[0];
+  async function analyze() {
+    if ((!analysisPrompt.trim() && !analysisSessionId.trim()) || analysisBusy) return;
+    setAnalysisBusy(true); setAnalysisError("");
+    try {
+      setPromptAnalysis(await api("/api/prompt-analysis", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(analysisSessionId.trim() ? { sessionId: analysisSessionId.trim() } : { prompt: analysisPrompt }) }));
+    } catch (error) { setAnalysisError(error instanceof Error ? error.message : String(error)); }
+    finally { setAnalysisBusy(false); }
+  }
   return (
     <section className={`analyst ${compact ? "compact" : ""}`}>
       <header>
@@ -994,6 +1007,21 @@ function Analyst({ compact = false }: { compact?: boolean }) {
           </div>
         ))}
       </div>
+      {!compact && <section className="prompt-analysis" aria-live="polite">
+        <header><div><h3>Prompt analysis</h3><p>Local advisory match: task complexity vs model</p></div>{promptAnalysis && <Status tone={promptAnalysis.complexity === "high" ? "warn" : "ok"}>{promptAnalysis.complexity} complexity · {promptAnalysis.score}/100</Status>}</header>
+        <label className="analysis-session">Indexed session ID <input value={analysisSessionId} onChange={(e) => setAnalysisSessionId(e.target.value)} placeholder="Optional: analyze first prompt from a session" /></label>
+        <textarea aria-label="Prompt to analyze" value={analysisPrompt} onChange={(e) => { setAnalysisPrompt(e.target.value); setAnalysisSessionId(""); }} placeholder="Paste a prompt to compare complexity with available models…" rows={4} />
+        <Button onClick={() => void analyze()} disabled={analysisBusy || (!analysisPrompt.trim() && !analysisSessionId.trim())}>{analysisBusy ? "Analyzing…" : "Analyze locally"}</Button>
+        {analysisError && <p className="notice error" role="alert">{analysisError}</p>}
+        {promptAnalysis && <>
+          <p className="hint-line">Required: {promptAnalysis.requiredCapabilities.join(", ") || "basic reasoning"}. {promptAnalysis.unknowns.join(" ")}</p>
+          {promptAnalysis.warnings?.map((warning: string) => <p className="notice" role="status" key={warning}>{warning}</p>)}
+          <div className="prompt-recommendations" role="table" aria-label="Model recommendations">
+            {promptAnalysis.recommendations.map((item: any) => <div className="prompt-recommendation" role="row" key={`${item.provider ?? "local"}-${item.model}`}><strong>{item.provider ? `${item.provider} / ` : ""}{item.model}</strong><Status tone={item.fit === "recommended" ? "ok" : item.fit === "fallback" ? "warn" : "error"}>{item.fit}</Status><span>{item.rationale}</span><b>{item.estimatedCostUsd == null ? "cost unknown" : `≈$${item.estimatedCostUsd.toFixed(2)}`} · {item.estimatedLatencyMs == null ? "latency unknown" : `~${item.estimatedLatencyMs}ms`}</b></div>)}
+          </div>
+          <details><summary>Complexity evidence</summary>{promptAnalysis.dimensions.map((dimension: any) => <p key={dimension.name}><strong>{dimension.name}</strong> {dimension.score}/100 — {dimension.evidence}</p>)}</details>
+        </>}
+      </section>}
       {!compact && (
         <div className="presets">
           <button
