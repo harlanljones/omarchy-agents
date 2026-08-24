@@ -4,6 +4,12 @@ Private local dashboard for Omarchy agent usage and transcript evidence.
 
 This app is developed from the workspace root. Use `bun run dev --filter=@omarchy-agents/web` for development and `bun run check` for the full workspace verification.
 
+## Screenshot
+
+![Web dashboard showing provider standings, source coverage, and the local analyst rail](../../docs/screenshots/dashboard.png)
+
+The dashboard combines local usage indexing, provider comparisons, transcript evidence, and the citation-bound analyst in one view.
+
 ## Local setup
 
 From a fresh clone of the workspace:

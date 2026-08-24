@@ -17,6 +17,10 @@ Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https
         <br><sub>Web dashboard — standings, coverage, and the local analyst</sub>
       </td>
       <td align="center">
+        <img src="docs/screenshots/usage-panel.png" alt="Agents usage panel: subscription limits, daily tokens, and model totals" width="300">
+        <br><sub>Agents usage panel — limits, daily tokens, and models</sub>
+      </td>
+      <td align="center">
         <img src="apps/omarchy-agent-leaderboard/preview.png" alt="Agent Leaderboard bar widget: today standings and last seven days" width="230">
         <br><sub>Agent Leaderboard bar widget</sub>
       </td>

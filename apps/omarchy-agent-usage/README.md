@@ -36,6 +36,12 @@ that has never run an AI coding agent draws nothing, and the icon arrives on
 its own the first time a scan finds usage. Drop it with
 `omarchy plugin disable omarchy.agents`.
 
+## Screenshot
+
+![Agents usage panel showing subscription limits, daily tokens, and model totals](../../docs/screenshots/usage-panel.png)
+
+The panel switches between enabled subscriptions and surfaces their limits, reset windows, daily token history, and model breakdowns. The image is a representative panel preview; values vary with the local usage records.
+
 ## Data
 
 Each agent is one JSON record in `~/.local/state/omarchy/agents/usage/`,
