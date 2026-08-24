@@ -12,7 +12,7 @@ let signToken: (audience: string, email?: string, extra?: Record<string, unknown
 let setVerifier: (typeof import("../src/server/auth"))["_setAccessVerifierForTests"];
 
 beforeAll(async () => {
-  setEnv("OMARCHY_AGENTS_DB", join(tmpdir(), `omarchy-agents-admin-test-${process.pid}.sqlite`));
+  setEnv("OMARCHY_AGENTS_DB", join(tmpdir(), `omarchy-agents-test-${process.pid}.sqlite`));
   setEnv("CLOUDFLARE_ACCESS_TEAM", "test-team");
   setEnv("CLOUDFLARE_ACCESS_AUD", "aud-main");
   setEnv("CLOUDFLARE_ACCESS_ADMIN_AUD", "aud-admin-a, aud-admin-b");
@@ -113,6 +113,42 @@ describe("limits portal boundary", () => {
 
   test("guards the portal page route too", async () =>
     expect((await get("/limits", "127.0.0.1")).status).toBe(401));
+});
+
+describe("productivity endpoint boundary", () => {
+  test("accepts an admin audience for cached productivity data", async () => {
+    const response = await get("/limits/api/productivity", "127.0.0.1", await signToken("aud-admin-a"));
+    expect(response.status).toBe(200);
+  });
+
+  test("accepts an admin sync request while sources are unconfigured", async () => {
+    const keys = ["PRODUCTIVITY_GITHUB_OWNER", "PRODUCTIVITY_GITHUB_OWNER_TYPE", "LINEAR_API_KEY", "PRODUCTIVITY_LINEAR_TEAM_IDS"] as const;
+    const values = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    keys.forEach((key) => delete process.env[key]);
+    try {
+      const token = await signToken("aud-admin-a");
+      const response = await app.request("https://127.0.0.1/limits/api/productivity/sync", {
+        method: "POST",
+        headers: { host: "127.0.0.1", "cf-access-jwt-assertion": token, "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(response.status).toBe(200);
+      expect((await response.json()).sources.every((source: any) => source.status === "unconfigured")).toBe(true);
+    } finally {
+      for (const key of keys) { const value = values[key]; if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    }
+  });
+
+  test("rejects missing, main-dashboard, and unknown-audience tokens", async () => {
+    expect((await get("/limits/api/productivity", "127.0.0.1")).status).toBe(401);
+    expect((await get("/limits/api/productivity", "127.0.0.1", await signToken("aud-main"))).status).toBe(401);
+    expect((await get("/limits/api/productivity", "127.0.0.1", await signToken("aud-other"))).status).toBe(401);
+  });
+
+  test("rejects service tokens", async () => {
+    const token = await signToken("aud-admin-a", "admin@example.com", { common_name: "svc.client" });
+    expect((await get("/limits/api/productivity", "127.0.0.1", token)).status).toBe(403);
+  });
 });
 
 describe("existing boundary preserved", () => {

@@ -10,6 +10,7 @@ import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/li
 import { effectivePricingTable, pricingOverrideError } from "./server/pricing";
 import { UsageRecordV1 } from "./shared/schemas";
 import { analyzePrompt } from "./server/prompt-analysis";
+import { productivityResponse, startProductivitySync, syncProductivitySources } from "./server/productivity";
 
 const app = new Hono(); app.use("*", security);
 app.use("/limits", requireAdmin);
@@ -65,6 +66,19 @@ app.get("/limits/api/advice", c => {
   return c.json(advise(loadUsageRecords(), mix));
 });
 app.get("/limits/api/pricing", c => c.json({ asOfNote: "Reference API rates; override via ~/.config/omarchy-agents/pricing.json", overrideError: pricingOverrideError(), entries: effectivePricingTable() }));
+app.get("/limits/api/productivity", c => {
+  try {
+    return c.json(productivityResponse({ query: {
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      repo: c.req.query("repo"),
+      team: c.req.query("team"),
+    } }));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+app.post("/limits/api/productivity/sync", async c => c.json(await syncProductivitySources()));
 app.get("/api/filter-options", c => c.json({
   projects: (db.query("SELECT DISTINCT project FROM sessions WHERE project IS NOT NULL AND trim(project) <> '' ORDER BY project COLLATE NOCASE").all() as Array<{ project: string }>).map(row => row.project),
   models: (db.query("SELECT DISTINCT model FROM sessions WHERE model IS NOT NULL AND trim(model) <> '' ORDER BY model COLLATE NOCASE").all() as Array<{ model: string }>).map(row => row.model),
@@ -107,5 +121,5 @@ app.use("*", serveStatic({ root: "./dist" }));
 app.use("*", serveStatic({ root: "./public" }));
 app.get("*", async c => { const file = Bun.file("./dist/index.html"); return file.size ? new Response(file, { headers: { "content-type": "text/html; charset=utf-8" } }) : c.text("Build the dashboard with `bun run build`.", 503); });
 
-if (import.meta.main) { void runIndex(); startWatching(); const port = Number(process.env.PORT ?? 4317); Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch }); console.log(`Omarchy Agents listening on http://127.0.0.1:${port}`); }
+if (import.meta.main) { void runIndex(); startWatching(); startProductivitySync(); const port = Number(process.env.PORT ?? 4317); Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch }); console.log(`Omarchy Agents listening on http://127.0.0.1:${port}`); }
 export default app;

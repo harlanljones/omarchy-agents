@@ -5,7 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Group } from "@visx/group";
 import { BarStack } from "@visx/shape";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
-import type { AdviceRow, AdviceVerdict, LimitsBoard, LimitWindowView, PricingEntry } from "../shared/schemas";
+import type { AdviceRow, AdviceVerdict, LimitsBoard, LimitWindowView, PricingEntry, ProductivityResponse } from "../shared/schemas";
 import "./styles.css";
 
 type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
@@ -1152,7 +1152,7 @@ function AdviceRowView({ row }: { row: AdviceRow }) {
   );
 }
 
-function Limits() {
+function LimitsBoardView() {
   const [board, setBoard] = useState<LimitsBoard | null>(null),
     [pricing, setPricing] = useState<PricingEntry[] | null>(null),
     [overrideError, setOverrideError] = useState(""),
@@ -1235,7 +1235,7 @@ function Limits() {
     }
   };
   return (
-    <div className="limits">
+    <div className="limits-view">
       <header className="pagehead">
         <h1>Usage limits</h1>
         <p>
@@ -1481,6 +1481,243 @@ function Limits() {
   );
 }
 
+const calendarShift = (day: string, amount: number) => {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+};
+
+function DailyBars({
+  label,
+  values,
+  formatValue,
+  tone,
+}: {
+  label: string;
+  values: Array<{ day: string; value: number }>;
+  formatValue: (value: number) => string;
+  tone: "tokens" | "commits" | "tasks";
+}) {
+  const width = 900, height = 96, top = 8, bottom = 20;
+  const max = Math.max(1, ...values.map((point) => point.value));
+  const slot = width / Math.max(1, values.length);
+  const barWidth = Math.max(1, slot - Math.min(4, slot * 0.25));
+  const total = values.reduce((sum, point) => sum + point.value, 0);
+  return (
+    <figure className={`daily-bars ${tone}`}>
+      <figcaption>
+        <strong>{label}</strong>
+        <span>{formatValue(total)} total · {formatValue(max)} daily peak</span>
+      </figcaption>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`${label} by day. ${formatValue(total)} total and ${formatValue(max)} daily peak.`}
+      >
+        <line x1="0" y1={height - bottom} x2={width} y2={height - bottom} className="chart-rule" />
+        {values.map((point, index) => {
+          const barHeight = point.value ? Math.max(2, (point.value / max) * (height - top - bottom)) : 1;
+          return (
+            <rect
+              key={point.day}
+              x={index * slot + (slot - barWidth) / 2}
+              y={height - bottom - barHeight}
+              width={barWidth}
+              height={barHeight}
+            >
+              <title>{point.day}: {formatValue(point.value)}</title>
+            </rect>
+          );
+        })}
+      </svg>
+    </figure>
+  );
+}
+
+const sourceTone = (status: ProductivityResponse["sources"][number]["status"]) =>
+  status === "fresh" || status === "empty"
+    ? "ok"
+    : status === "stale" || status === "rate-limited"
+      ? "warn"
+      : "error";
+
+function ProductivityView() {
+  const requestedRange = Number(new URLSearchParams(window.location.search).get("range"));
+  const [rangeDays, setRangeDays] = useState<7 | 30 | 90>([7, 30, 90].includes(requestedRange) ? requestedRange as 7 | 30 | 90 : 30),
+    [data, setData] = useState<ProductivityResponse | null>(null),
+    [loading, setLoading] = useState(true),
+    [syncing, setSyncing] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+
+  const writeRangeToUrl = (days: 7 | 30 | 90) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "productivity");
+    params.set("range", String(days));
+    window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
+  };
+
+  const load = async (days: 7 | 30 | 90, baseline = data, updateUrl = false) => {
+    setLoading(true);
+    setError("");
+    try {
+      const anchor = baseline ?? await api<ProductivityResponse>("/limits/api/productivity");
+      const path = days === 30
+        ? "/limits/api/productivity"
+        : `/limits/api/productivity?from=${calendarShift(anchor.range.to, -(days - 1))}&to=${anchor.range.to}`;
+      const next = days === 30 && !baseline ? anchor : await api<ProductivityResponse>(path);
+      setData(next);
+      setRangeDays(days);
+      if (updateUrl) writeRangeToUrl(days);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setError(baseline ? `${message} Showing retained data for ${baseline.range.from}—${baseline.range.to}; the selected range did not load.` : message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(rangeDays); }, []);
+
+  const changeRange = (days: 7 | 30 | 90) => {
+    if (days !== rangeDays && !loading) void load(days, data, true);
+  };
+
+  const sync = async () => {
+    setSyncing(true);
+    setNotice("Synchronizing GitHub and Linear on the server…");
+    try {
+      const result = await api<{ sources: ProductivityResponse["sources"] }>("/limits/api/productivity/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      setNotice("Source cache refreshed. Loading the latest comparison…");
+      await load(rangeDays, data);
+      const unavailable = result.sources.filter((source) => source.status !== "fresh" && source.status !== "empty");
+      setNotice(unavailable.length
+        ? `Sync finished with source warnings: ${unavailable.map((source) => `${source.name} is ${source.status}`).join("; ")}. Last successful cache remains available where present.`
+        : "GitHub and Linear cache is up to date.");
+    } catch (caught) {
+      setNotice(`Sync could not finish: ${caught instanceof Error ? caught.message : String(caught)}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const fmtExact = (value: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+  const formatRatio = (value: number | null) => value == null ? "Unavailable" : `${fmt.format(value)} tokens`;
+  const start = data?.range.from ? new Date(`${data.range.from}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  const end = data?.range.to ? new Date(`${data.range.to}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  const middleDay = data?.tokens.daily[Math.floor((data.tokens.daily.length - 1) / 2)]?.day;
+  const middle = middleDay ? new Date(`${middleDay}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+
+  return (
+    <div className="productivity-view" aria-busy={loading}>
+      <header className="pagehead productivity-head">
+        <div>
+          <h1>Tokens vs productivity</h1>
+          <p>Daily token use beside public commits and completed Linear tasks. This is descriptive evidence, not a productivity score.</p>
+        </div>
+        <Button onClick={() => void sync()} disabled={syncing}>{syncing ? "Syncing sources…" : "Sync sources"}</Button>
+      </header>
+      <div className="productivity-controls">
+        <div className="segmented" role="group" aria-label="Comparison range">
+          {([7, 30, 90] as const).map((days) => (
+            <button key={days} aria-pressed={rangeDays === days} disabled={loading} onClick={() => changeRange(days)}>{days} days</button>
+          ))}
+        </div>
+        {data && <span>{data.range.from}—{data.range.to} · {data.range.timeZone}</span>}
+      </div>
+      {notice && <p className="notice" role="status">{notice}</p>}
+      {error && <p className="notice error" role="alert">{error} Check source configuration, then try again.</p>}
+      {loading && !data && <section className="productivity-loading" aria-label="Loading comparison"><Sk w={240} /><Sk w={520} /><Sk w={420} /></section>}
+      {data && (
+        <>
+          <section aria-labelledby="productivity-totals-title">
+            <h2 id="productivity-totals-title" className="sr-only">Range totals</h2>
+            <dl className="productivity-totals">
+              <div><dt>Indexed tokens</dt><dd>{fmtExact(data.tokens.total)}</dd></div>
+              <div><dt>Public commits</dt><dd>{fmtExact(data.commits.total)}</dd></div>
+              <div><dt>Completed tasks</dt><dd>{fmtExact(data.tasks.total)}</dd></div>
+            </dl>
+          </section>
+          <section aria-labelledby="daily-comparison-title">
+            <div className="section-title"><h2 id="daily-comparison-title">Daily comparison</h2><span>shared dates · independent scales</span></div>
+            <div className="daily-series">
+              <DailyBars label="Tokens" tone="tokens" values={data.tokens.daily.map((row) => ({ day: row.day, value: row.tokens }))} formatValue={(value) => fmt.format(value)} />
+              <DailyBars label="Commits" tone="commits" values={data.commits.daily.map((row) => ({ day: row.day, value: row.count }))} formatValue={fmtExact} />
+              <DailyBars label="Tasks" tone="tasks" values={data.tasks.daily.map((row) => ({ day: row.day, value: row.count }))} formatValue={fmtExact} />
+              <div className="shared-axis" aria-hidden="true"><span>{start}</span><span>{middle}</span><span>{end}</span></div>
+            </div>
+            <table className="sr-only">
+              <caption>Exact daily tokens, commits, and completed tasks</caption>
+              <thead><tr><th>Day</th><th>Tokens</th><th>Commits</th><th>Completed tasks</th></tr></thead>
+              <tbody>{data.tokens.daily.map((row, index) => <tr key={row.day}><th>{row.day}</th><td>{row.tokens}</td><td>{data.commits.daily[index]?.count ?? 0}</td><td>{data.tasks.daily[index]?.count ?? 0}</td></tr>)}</tbody>
+            </table>
+          </section>
+          <section className="ratio-band" aria-labelledby="ratios-title">
+            <div><h2 id="ratios-title">Descriptive ratios</h2><p>Normalized against activity counts in this range.</p></div>
+            <dl><div><dt>Tokens per commit</dt><dd>{formatRatio(data.ratios.tokensPerCommit)}</dd></div><div><dt>Tokens per task</dt><dd>{formatRatio(data.ratios.tokensPerTask)}</dd></div></dl>
+            <p className="noncausal-note"><strong>Non-causal.</strong> These ratios do not measure quality, attribute work to a session, or show that token use caused an outcome.</p>
+          </section>
+          <section aria-labelledby="breakdowns-title">
+            <div className="section-title"><h2 id="breakdowns-title">Activity breakdowns</h2><span>cached source records in range</span></div>
+            <div className="breakdown-grid">
+              <div className="breakdown"><h3>GitHub repositories</h3>{data.commits.repos.length ? <ol>{data.commits.repos.map((repo) => <li key={repo.repository}><span>{repo.repository}</span><b>{repo.count}</b></li>)}</ol> : <p>No public commits recorded for this range.</p>}</div>
+              <div className="breakdown"><h3>Linear teams</h3>{data.tasks.teams.length ? <ol>{data.tasks.teams.map((team) => <li key={team.id}><span>{team.team}</span><b>{team.count}</b></li>)}</ol> : <p>No completed tasks recorded for this range.</p>}</div>
+            </div>
+          </section>
+          <section aria-labelledby="source-state-title">
+            <div className="section-title"><h2 id="source-state-title">Source state</h2><span>cached reads · six-hour server refresh</span></div>
+            <div className="source-ledger">
+              {data.sources.map((source) => (
+                <div key={source.id} className="source-row">
+                  <div><strong>{source.name}</strong><span>{source.recordCount} cached records</span></div>
+                  <Status tone={sourceTone(source.status)}>{source.status}</Status>
+                  <span>{source.coverage ? `${source.coverage.from}—${source.coverage.to}` : "coverage unavailable"}</span>
+                  <time dateTime={source.lastSyncedAt ?? undefined}>{source.lastSyncedAt ? new Date(source.lastSyncedAt).toLocaleString() : "never synced"}</time>
+                  {source.error && <p>{source.error}</p>}
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Limits() {
+  const viewFromUrl = () => new URLSearchParams(window.location.search).get("view") === "productivity" ? "productivity" : "limits";
+  const [view, setView] = useState<"limits" | "productivity">(viewFromUrl);
+  useEffect(() => {
+    const sync = () => setView(viewFromUrl());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const select = (next: "limits" | "productivity") => {
+    const params = new URLSearchParams(window.location.search);
+    if (next === "productivity") params.set("view", "productivity");
+    else { params.delete("view"); params.delete("range"); }
+    const query = params.toString();
+    window.history.pushState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    setView(next);
+  };
+  return (
+    <div className="limits">
+      <div className="portal-tabs" role="tablist" aria-label="Limits portal views">
+        <button id="limits-tab" role="tab" aria-selected={view === "limits"} aria-controls="limits-panel" onClick={() => select("limits")}>Limits</button>
+        <button id="productivity-tab" role="tab" aria-selected={view === "productivity"} aria-controls="productivity-panel" onClick={() => select("productivity")}>Tokens vs productivity</button>
+      </div>
+      <div id={view === "limits" ? "limits-panel" : "productivity-panel"} role="tabpanel" aria-labelledby={view === "limits" ? "limits-tab" : "productivity-tab"}>
+        {view === "limits" ? <LimitsBoardView /> : <ProductivityView />}
+      </div>
+    </div>
+  );
+}
+
 function Settings() {
   const [health, setHealth] = useState<any>(null),
     [notice, setNotice] = useState("");
@@ -1670,7 +1907,7 @@ function App() {
     }
   };
   return (
-    <div className={`shell ${nav === "analyst" ? "without-rail" : ""}`}>
+    <div className={`shell ${nav === "analyst" ? "without-rail" : ""} ${nav === "limits" ? "limits-shell" : ""}`}>
       <a href="#main" className="skip">
         Skip to content
       </a>

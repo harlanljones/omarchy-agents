@@ -7,3 +7,4 @@ apps/*/node_modules/
 *.sqlite-shm
 *.sqlite-wal
 .impeccable/review/
+.linear.toml

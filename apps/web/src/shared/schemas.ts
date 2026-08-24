@@ -105,6 +105,35 @@ export type PricingEntry = {
   cacheReadPerMtok: number, cacheWritePerMtok: number,
   currency: string, asOf: string, source: PricingSource
 };
+export const ProductivitySourceStatus = z.enum(["fresh", "empty", "stale", "rate-limited", "unconfigured", "error"]);
+export const ProductivityResponseV1 = z.object({
+  range: z.object({ from: z.string(), to: z.string(), timeZone: z.string() }),
+  generatedAt: z.string(),
+  tokens: z.object({ total: z.number(), daily: z.array(z.object({ day: z.string(), tokens: z.number() })) }),
+  commits: z.object({
+    total: z.number(),
+    daily: z.array(z.object({ day: z.string(), count: z.number() })),
+    repos: z.array(z.object({ repository: z.string(), count: z.number() })),
+  }),
+  tasks: z.object({
+    total: z.number(),
+    daily: z.array(z.object({ day: z.string(), count: z.number() })),
+    teams: z.array(z.object({ id: z.string(), team: z.string(), count: z.number() })),
+  }),
+  ratios: z.object({ tokensPerCommit: z.number().nullable(), tokensPerTask: z.number().nullable() }),
+  filters: z.object({ repo: z.string().nullable(), team: z.string().nullable() }),
+  sources: z.array(z.object({
+    id: z.enum(["github", "linear"]),
+    name: z.string(),
+    status: ProductivitySourceStatus,
+    lastSyncedAt: z.string().nullable(),
+    error: z.string().nullable(),
+    recordCount: z.number().int().nonnegative(),
+    coverage: z.object({ from: z.string(), to: z.string() }).nullable(),
+  })),
+});
+export type ProductivitySourceState = z.infer<typeof ProductivityResponseV1>["sources"][number];
+export type ProductivityResponse = z.infer<typeof ProductivityResponseV1>;
 export type PromptComplexity = "low" | "medium" | "high";
 export type PromptAnalysis = {
   redactedPrompt: string, complexity: PromptComplexity, score: number,

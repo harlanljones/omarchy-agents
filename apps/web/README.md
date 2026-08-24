@@ -57,6 +57,8 @@ The advisor ranks platforms by binding headroom (smallest session/weekly/monthly
 
 Pricing comes from a built-in table snapshot (`PRICING_AS_OF`) of reference per-token rates. To correct or extend it, create `~/.config/omarchy-agents/pricing.json` (or point `OMARCHY_AGENTS_CONFIG` at another file) mapping model names or prefixes to `{ input, output, cacheRead }` dollar rates per million tokens, or `null` to mark a model unpriced. Overrides take precedence over built-ins and appear tagged on the pricing page.
 
+`/limits?view=productivity` compares indexed daily token totals with cached public GitHub commits and completed Linear tasks. Configure `PRODUCTIVITY_GITHUB_OWNER`, `PRODUCTIVITY_GITHUB_OWNER_TYPE` (`user` or `org`), optional comma-separated `PRODUCTIVITY_GITHUB_REPOS`, `LINEAR_API_KEY`, comma-separated `PRODUCTIVITY_LINEAR_TEAM_IDS`, and optional `PRODUCTIVITY_TIME_ZONE` (defaults to `America/Los_Angeles`) in `dashboard.env`. The ignored `.linear.toml` file is not read by the application. Page loads remain cache-only; the server refreshes configured sources every six hours (and immediately at startup when the cache is missing or stale), while the admin-only **Sync sources** action refreshes them on demand. A failed source refresh retains its last successful cache and reports the source as stale, rate-limited, or unavailable.
+
 ## Rollback
 
 ```bash

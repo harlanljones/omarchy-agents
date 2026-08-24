@@ -47,7 +47,13 @@ export async function security(c: Context, next: Next) {
   const host = lower((c.req.header("host") ?? "").split(":")[0]);
   if (!localHosts.has(host) && host !== remoteHost() && host !== apiHost()) return c.json({ error: "Host not allowed" }, 403);
   const origin = c.req.header("origin");
-  if (origin) { try { if (lower(new URL(origin).hostname) !== host) return c.json({ error: "Origin not allowed" }, 403); } catch { return c.json({ error: "Origin not allowed" }, 403); } }
+  if (origin) {
+    try {
+      const originHost = lower(new URL(origin).hostname);
+      const dashboardViaService = isServiceOrigin(host) && originHost === lower(remoteHost());
+      if (originHost !== host && !dashboardViaService) return c.json({ error: "Origin not allowed" }, 403);
+    } catch { return c.json({ error: "Origin not allowed" }, 403); }
+  }
   const token = c.req.header("cf-access-jwt-assertion");
   if (!localHosts.has(host) && !isAdminPath(c.req.path) && !(isServiceOrigin(host) && isAdminAssetPath(c.req.path))) {
     if (isServiceOrigin(host)) {

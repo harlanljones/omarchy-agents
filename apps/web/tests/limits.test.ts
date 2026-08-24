@@ -1,6 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { UsageRecordV1, type UsageRecord } from "../src/shared/schemas";
-import { advise, buildPlatformLimits, classifyWindow, formatDuration, headroomOf, TASK_PRESETS } from "../src/server/limits";
+
+let advise: typeof import("../src/server/limits").advise;
+let buildPlatformLimits: typeof import("../src/server/limits").buildPlatformLimits;
+let classifyWindow: typeof import("../src/server/limits").classifyWindow;
+let formatDuration: typeof import("../src/server/limits").formatDuration;
+let headroomOf: typeof import("../src/server/limits").headroomOf;
+let TASK_PRESETS: typeof import("../src/server/limits").TASK_PRESETS;
+beforeAll(async () => {
+  process.env.OMARCHY_AGENTS_DB = join(tmpdir(), `omarchy-agents-test-${process.pid}.sqlite`);
+  ({ advise, buildPlatformLimits, classifyWindow, formatDuration, headroomOf, TASK_PRESETS } = await import("../src/server/limits"));
+});
 
 const NOW = new Date("2026-08-23T18:00:00Z").valueOf();
 const hoursFromNow = (h: number) => new Date(NOW + h * 3600_000).toISOString();

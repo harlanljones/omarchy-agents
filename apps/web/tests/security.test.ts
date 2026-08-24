@@ -50,4 +50,46 @@ describe("service identity boundary", () => {
     });
     expect(res.status).toBe(200);
   });
+
+  test("accepts the configured dashboard origin through the service hostname", async () => {
+    setEnv({
+      DASHBOARD_HOSTNAME: "dashboard.example.com",
+      API_HOSTNAME: "api.example.com",
+      CLOUDFLARE_ACCESS_TEAM: "team",
+      CLOUDFLARE_ACCESS_API_AUD: "api-aud",
+      ACCESS_CLIENT_ID: "worker-service",
+    });
+    const { Hono } = await import("hono");
+    const { security, _setAccessVerifierForTests } = await import("../src/server/auth");
+    _setAccessVerifierForTests(async () => ({ payload: { common_name: "worker-service" } }) as never);
+    const boundary = new Hono();
+    boundary.use("*", security);
+    boundary.post("/api/analysis/run", c => c.json({ ok: true }));
+
+    const response = await boundary.request("https://api.example.com/api/analysis/run", {
+      method: "POST",
+      headers: {
+        host: "api.example.com",
+        origin: "https://dashboard.example.com",
+        "content-type": "application/json",
+        "cf-access-jwt-assertion": "token",
+      },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(200);
+
+    const crossSiteResponse = await boundary.request("https://api.example.com/api/analysis/run", {
+      method: "POST",
+      headers: {
+        host: "api.example.com",
+        origin: "https://evil.example.com",
+        "content-type": "application/json",
+        "cf-access-jwt-assertion": "token",
+      },
+      body: "{}",
+    });
+
+    expect(crossSiteResponse.status).toBe(403);
+  });
 });
