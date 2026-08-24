@@ -80,6 +80,7 @@ app.patch("/api/suggestions/:id", async c => { const body = await c.req.json(); 
 app.use("/assets/*", serveStatic({ root: "./dist" }));
 app.use("/provider-assets/*", serveStatic({ root: "./dist" }));
 app.use("/fonts/*", serveStatic({ root: "./dist" }));
+app.use("*", serveStatic({ root: "./dist" }));
 app.get("*", async c => { const file = Bun.file("./dist/index.html"); return file.size ? new Response(file, { headers: { "content-type": "text/html; charset=utf-8" } }) : c.text("Build the dashboard with `bun run build`.", 503); });
 
 if (import.meta.main) { void runIndex(); startWatching(); const port = Number(process.env.PORT ?? 4317); Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch }); console.log(`Omarchy Agents listening on http://127.0.0.1:${port}`); }

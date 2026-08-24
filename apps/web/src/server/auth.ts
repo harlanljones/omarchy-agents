@@ -38,6 +38,9 @@ export function _setAccessVerifierForTests(verify: ((token: string, issuer: stri
 export const isAdminPath = (path: string) =>
   path === "/limits" || path.startsWith("/limits/");
 
+export const isAdminAssetPath = (path: string) =>
+  path === "/favicon.svg" || path === "/robots.txt" || path.startsWith("/assets/") || path.startsWith("/provider-assets/") || path.startsWith("/fonts/");
+
 const isServiceOrigin = (host: string) => host !== remoteHost() && Boolean(apiHost()) && host === apiHost() && Boolean(apiAudience()) && Boolean(serviceClientId());
 
 export async function security(c: Context, next: Next) {
@@ -46,7 +49,7 @@ export async function security(c: Context, next: Next) {
   const origin = c.req.header("origin");
   if (origin) { try { if (lower(new URL(origin).hostname) !== host) return c.json({ error: "Origin not allowed" }, 403); } catch { return c.json({ error: "Origin not allowed" }, 403); } }
   const token = c.req.header("cf-access-jwt-assertion");
-  if (!localHosts.has(host) && !isAdminPath(c.req.path)) {
+  if (!localHosts.has(host) && !isAdminPath(c.req.path) && !(isServiceOrigin(host) && isAdminAssetPath(c.req.path))) {
     if (isServiceOrigin(host)) {
       if (!token || !accessTeam() || !apiAudience()) return c.json({ error: "Access authentication is not configured" }, 401);
       try {
@@ -62,8 +65,20 @@ export async function security(c: Context, next: Next) {
     }
   }
   if (["POST", "PATCH", "PUT", "DELETE"].includes(c.req.method) && !c.req.header("content-type")?.toLowerCase().startsWith("application/json")) return c.json({ error: "JSON content type required" }, 415);
+  if (!localHosts.has(host) && isServiceOrigin(host) && isAdminAssetPath(c.req.path)) {
+    const audiences = adminAudiences();
+    if (!token || !audiences.length || !allowedEmail() || !accessTeam()) return c.json({ error: "The limits portal is not configured" }, 401);
+    let accepted = false;
+    for (const audience of audiences) {
+      try {
+        const { payload } = await verifyAccess(token, audience);
+        if (!payload.common_name && lower(String(payload.email ?? "")) === allowedEmail()) { accepted = true; break; }
+      } catch { }
+    }
+    if (!accepted) return c.json({ error: "Invalid Access token" }, 401);
+  }
   await next();
-  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   c.header("X-Content-Type-Options", "nosniff"); c.header("Referrer-Policy", "no-referrer"); c.header("X-Frame-Options", "DENY"); c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
   if (c.req.path.startsWith("/api/")) c.header("Cache-Control", "no-store");
 }

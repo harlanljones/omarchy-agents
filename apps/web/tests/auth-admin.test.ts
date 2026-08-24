@@ -89,6 +89,19 @@ describe("limits portal boundary", () => {
     }
   });
 
+  test("serves portal assets to the admin session on the service origin", async () => {
+    setEnv("API_HOSTNAME", "api.example.com");
+    setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
+    setEnv("ACCESS_CLIENT_ID", "svc.client");
+    try {
+      const response = await get("/favicon.svg", "api.example.com", await signToken("aud-admin-a"));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("image/svg+xml");
+    } finally {
+      for (const key of ["API_HOSTNAME", "CLOUDFLARE_ACCESS_API_AUD", "ACCESS_CLIENT_ID"]) delete process.env[key];
+    }
+  });
+
   test("fails closed when no admin audience is configured", async () => {
     const saved = process.env.CLOUDFLARE_ACCESS_ADMIN_AUD;
     delete process.env.CLOUDFLARE_ACCESS_ADMIN_AUD;
