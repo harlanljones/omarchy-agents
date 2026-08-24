@@ -66,9 +66,13 @@ export function productivityConfig(env = process.env): ProductivityConfig {
 
 function configurationError(source: SyncSource, config: ProductivityConfig): string | null {
   if (source === "github") {
-    if (!config.githubOwner) return "Set PRODUCTIVITY_GITHUB_OWNER to enable GitHub synchronization.";
-    if (!config.githubOwnerType) return "Set PRODUCTIVITY_GITHUB_OWNER_TYPE to user or org.";
-    return null;
+    const missing = [
+      !config.githubOwner ? "PRODUCTIVITY_GITHUB_OWNER" : null,
+      !config.githubOwnerType ? "PRODUCTIVITY_GITHUB_OWNER_TYPE" : null,
+    ].filter(Boolean);
+    if (!missing.length) return null;
+    const additional = !config.githubOwnerType ? " (set to 'user' or 'org')" : "";
+    return `Set ${missing.join(" and ")}${additional} to enable GitHub synchronization.`;
   }
   const missing = [
     !config.linearApiKey ? "LINEAR_API_KEY" : null,
