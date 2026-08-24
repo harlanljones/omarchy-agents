@@ -13,7 +13,7 @@ The workspace is the source of truth for application and plugin code. Chezmoi is
 
 - `~/.config/systemd/user/omarchy-agents-*` and the dedicated Ollama unit.
 - `~/.config/omarchy-agents/{dashboard,tunnel}.env` creation and permissions; actual secrets remain untracked.
-- User collector overrides under `~/.local/bin/omarchy-agent-usage-*`, and the Cline and OpenCode Go dashboard helpers (login, scrape, override, their timers, and the `opencode-go-usage` skill).
+- User collector overrides under `~/.local/bin/omarchy-agent-usage-*`, and the Cline, Cursor, and OpenCode Go dashboard helpers (login/capture, scrape, override, their timers, and the `opencode-go-usage` skill).
 - Cline workflow/settings, Omarchy shell placement/settings, and provider-specific private configuration.
 - A lightweight after-apply hook that runs this repository's build and local deployment when the checkout exists.
 

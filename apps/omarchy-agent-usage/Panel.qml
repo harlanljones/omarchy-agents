@@ -101,11 +101,12 @@ Panel {
   // and that beats reading it back out of the label: a model-scoped limit is
   // titled after its model, and a name like "Opus 5 (1M context)" would parse
   // as a one-minute window.
-  function limitWindow(label, percent, resetAt, title) {
+  function limitWindow(label, percent, resetAt, title, binding) {
     return {
       title: String(title || "") !== "" ? String(title) : windowTitle(label),
       percent: Number(percent),
-      resetAt: String(resetAt || "")
+      resetAt: String(resetAt || ""),
+      binding: binding !== false
     }
   }
 
@@ -116,7 +117,7 @@ Panel {
     for (var i = 0; i < list.length; i++) {
       var entry = list[i] || {}
       var percent = Number(entry.percent)
-      if (percent >= 0) out.push(limitWindow(entry.label, percent, entry.resetsAt, entry.title))
+      if (percent >= 0) out.push(limitWindow(entry.label, percent, entry.resetsAt, entry.title, entry.binding))
     }
     return out
   }
@@ -127,7 +128,7 @@ Panel {
     var windows = limitWindows(p)
     var best = null
     for (var i = 0; i < windows.length; i++) {
-      if (!best || windows[i].percent > best.percent) best = windows[i]
+      if (windows[i].binding !== false && (!best || windows[i].percent > best.percent)) best = windows[i]
     }
     return best
   }

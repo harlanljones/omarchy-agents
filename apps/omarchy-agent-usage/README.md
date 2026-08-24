@@ -54,7 +54,7 @@ light surfaces — and the bar glyph stands in when there is none.
 |---|---|---|
 | `claude` | Anthropic's OAuth usage endpoint (5-hour session + 7-day weekly) | `~/.claude/projects` transcripts, opencode sessions on an Anthropic provider, plus `stats-cache.json` and `history.jsonl` as fallback |
 | `codex` | The Codex app-server RPC | native Codex CLI session files (plus pi and opencode sessions) |
-| `cursor` | Optional manual included-usage percentage from `cursor.com/dashboard` (see below) | Cursor chat stores plus real token totals from the `statusLine` hook |
+| `cursor` | Real Included/Auto/API percentages and billing reset from Cursor Agent's `/usage` view | Cursor chat stores plus real token totals from the `statusLine` hook |
 | `fireworks` | Estimated prepaid balance: configured funding minus rated account costs | Fireworks billing API, grouped by day and model for the last 30 days |
 | `cline` | Estimated from priced transcripts, or real dashboard figures via `/usage` (see below) | `~/.cline/data/sessions` transcripts (per-message token metrics and model attribution) |
 | `opencode` | Real Go Rolling/Weekly/Monthly figures via the Go scraper (see below), plus optional provider-scoped token quotas via `OPENCODE_USAGE_LIMITS` | opencode's local session storage (per-provider/model input/output/cache token totals) |
@@ -104,20 +104,25 @@ windows; providers without a configured quota remain token-only.
 ### Cursor included usage
 
 Cursor's local chat database has prompt and session history, but no token
-counts or quota endpoint. The Cursor collector therefore combines chat-store
-history with real per-call token totals written by the `statusLine` hook. Only
-interactive sessions recorded after the hook is installed contribute token
-data; older chats remain useful for prompt and session counts.
+counts. The collector therefore combines chat-store history with real per-call
+token totals written by the `statusLine` hook. Only interactive sessions
+recorded after the hook is installed contribute token data; older chats remain
+useful for prompt and session counts.
 
-For the monthly included-usage meter, read the percentage from
-`https://cursor.com/dashboard` and record it with:
+Cursor Agent exposes the account's current Included, Auto, and API percentages
+plus its billing-cycle reset in `/usage`. A user timer captures that read-only
+view every 15 minutes and writes `~/.config/omarchy/agents/cursor-dashboard.json`;
+the collector prefers that fresh data for 24 hours. Run
+`omarchy-cursor-usage-scrape` manually to refresh immediately.
+
+The manual override remains available as a fallback:
 
 ```sh
 omarchy-cursor-usage-override --included 42
 ```
 
-Pass `--resets 12d` when a reset countdown is known. The panel keeps the
-manual value for 24 hours, then drops it rather than showing stale quota data.
+Pass `--resets 12d` when a reset countdown is known. Automated and manual
+values age out after 24 hours rather than leaving stale quota data onscreen.
 
 ### OpenCode Go limits
 
