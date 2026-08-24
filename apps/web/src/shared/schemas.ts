@@ -99,6 +99,22 @@ export type AdviceResponse = {
   rows: AdviceRow[]
 };
 export type PricingSource = "built-in" | "override";
+export type AlertRule = "threshold-20" | "threshold-10" | "exhausted" | "projected-exhaustion" | "collector-stale" | "auth-needed";
+export type AlertSeverity = "warning" | "critical";
+export type AlertView = {
+  id: string, providerId: string, providerName: string,
+  rule: AlertRule, severity: AlertSeverity,
+  windowLabel: string | null, resetsAt: string | null,
+  message: string, firedAt: string, resolvedAt: string | null
+};
+export type ForecastView = {
+  providerId: string, providerName: string, windowLabel: string, kind: LimitKind,
+  samples: number, resetsAt: string | null, sufficient: boolean,
+  ratePerHour: number | null, projectedExhaustionAt: string | null
+};
+export type AlertsResponse = {
+  generatedAt: string, active: AlertView[], recent: AlertView[], forecasts: ForecastView[]
+};
 export type PricingEntry = {
   model: string, match: string,
   inputPerMtok: number, outputPerMtok: number,

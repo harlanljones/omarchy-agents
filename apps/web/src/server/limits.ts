@@ -1,39 +1,14 @@
 import { db, json } from "./db";
-import { UsageRecordV1, type AdviceResponse, type AdviceRow, type AdviceVerdict, type LimitKind, type LimitWindowView, type LimitsBoard, type PlatformLimits, type PlatformStatus, type UsageRecord } from "../shared/schemas";
+import { classifyWindow, deriveStatus, formatDuration } from "./watch";
+import { UsageRecordV1, type AdviceResponse, type AdviceRow, type AdviceVerdict, type LimitKind, type LimitWindowView, type LimitsBoard, type PlatformLimits, type UsageRecord } from "../shared/schemas";
 import { indexProgress } from "./indexer";
 import { dominantModel, estimateCostUsd, ratesForModel, type TokenMix } from "./pricing";
+
+export { classifyWindow, formatDuration };
 
 export function loadUsageRecords(): UsageRecord[] {
   return (db.query("SELECT record_json FROM usage_records").all() as any[])
     .flatMap(row => { const parsed = UsageRecordV1.safeParse(json(row.record_json, {})); return parsed.success ? [parsed.data] : []; });
-}
-
-const kindFromTitle = (title: string): LimitKind | null => {
-  const t = title.toLowerCase();
-  if (t.includes("month")) return "monthly";
-  if (t.includes("week") || t.includes("7-day")) return "weekly";
-  if (t.includes("session") || /\d+\s*h/.test(t)) return "session";
-  return null;
-};
-
-const kindFromLabel = (label: string): LimitKind => {
-  const t = label.toLowerCase();
-  if (t.includes("month") || t.includes("30-day")) return "monthly";
-  if (t.includes("week") || t.includes("7-day") || t.includes("seven")) return "weekly";
-  if (t.includes("session") || /\d+\s*-?\s*h(our)?\b/.test(t)) return "session";
-  return "other";
-};
-
-export function classifyWindow(label: string, title?: string): LimitKind {
-  return (title ? kindFromTitle(title) : null) ?? kindFromLabel(label);
-}
-
-export function formatDuration(ms: number) {
-  if (!(ms > 0)) return "now";
-  const minutes = Math.floor(ms / 60_000), hours = Math.floor(minutes / 60), days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ${hours % 24}h`;
-  if (hours > 0) return `${hours}h ${(minutes % 60)}m`;
-  return `${Math.max(1, minutes)}m`;
 }
 
 function normalizeWindows(record: UsageRecord): LimitWindowView[] {
@@ -46,14 +21,6 @@ function normalizeWindows(record: UsageRecord): LimitWindowView[] {
       resetsAt: entry.resetsAt && !Number.isNaN(new Date(entry.resetsAt).valueOf()) ? new Date(entry.resetsAt).toISOString() : null,
     }))
     .filter(w => Number.isFinite(w.used));
-}
-
-function deriveStatus(record: UsageRecord, now: number): PlatformStatus {
-  if (record.ready === false) return "auth-needed";
-  const updated = record.updatedAt ? new Date(record.updatedAt).valueOf() : NaN;
-  if (!Number.isNaN(updated) && now - updated > 26 * 3600_000) return "stale";
-  const hasSignals = (record.limits?.length ?? 0) > 0 || !!record.balance || Number(record.todayTotalTokens ?? 0) > 0 || (record.recentDays ?? []).some(d => d.messageCount > 0);
-  return hasSignals ? "ready" : "no-data";
 }
 
 export function buildPlatformLimits(record: UsageRecord, now = Date.now()): PlatformLimits {

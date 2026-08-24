@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, created_at TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS suggestions (id TEXT PRIMARY KEY, report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE, title TEXT NOT NULL, impact TEXT NOT NULL, effort TEXT NOT NULL, confidence REAL NOT NULL, rationale TEXT NOT NULL, evidence_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, role TEXT NOT NULL, content TEXT NOT NULL, citations_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS limit_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, window_label TEXT NOT NULL, window_kind TEXT NOT NULL, resets_at TEXT, used REAL NOT NULL, recorded_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS limit_snapshots_cycle ON limit_snapshots(provider, window_label, resets_at, recorded_at);
+CREATE TABLE IF NOT EXISTS usage_alerts (id TEXT PRIMARY KEY, provider TEXT NOT NULL, rule TEXT NOT NULL, window_label TEXT NOT NULL, resets_at TEXT, severity TEXT NOT NULL, message TEXT NOT NULL, fired_at TEXT NOT NULL, resolved_at TEXT, notified_at TEXT, recovery_notified_at TEXT);
+CREATE INDEX IF NOT EXISTS usage_alerts_active ON usage_alerts(resolved_at, fired_at DESC);
 `);
 
 export function json<T>(value: string | null | undefined, fallback: T): T { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } }

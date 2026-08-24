@@ -5,7 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Group } from "@visx/group";
 import { BarStack } from "@visx/shape";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
-import type { AdviceRow, AdviceVerdict, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
+import type { AdviceRow, AdviceVerdict, AlertsResponse, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
 import "./styles.css";
 
 type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
@@ -1160,6 +1160,7 @@ function AdviceRowView({ row }: { row: AdviceRow }) {
 
 function LimitsBoardView() {
   const [board, setBoard] = useState<LimitsBoard | null>(null),
+    [alerts, setAlerts] = useState<AlertsResponse | null>(null),
     [pricing, setPricing] = useState<PricingEntry[] | null>(null),
     [overrideError, setOverrideError] = useState(""),
     [task, setTask] = useState<"" | "small" | "medium" | "large">(""),
@@ -1195,6 +1196,9 @@ function LimitsBoardView() {
     api<LimitsBoard>("/limits/api/board")
       .then(setBoard)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    api<AlertsResponse>("/limits/api/alerts")
+      .then(setAlerts)
+      .catch(() => setAlerts(null));
     api<{ entries: PricingEntry[]; overrideError: string | null }>("/limits/api/pricing")
       .then((p) => {
         setPricing(p.entries);
@@ -1354,6 +1358,98 @@ function LimitsBoardView() {
               {bindingPlatform?.binding ? <><strong>{bindingPlatform.providerName}</strong> binds first at {Math.round(bindingPlatform.binding.used * 100)}% used ({Math.round((1 - bindingPlatform.binding.used) * 100)}% headroom){bindingPlatform.binding.resetsAt ? `; resets ${new Date(bindingPlatform.binding.resetsAt).toLocaleString()}` : "; reset unknown"}.</> : "No binding limit is confirmed from current records."}
               {advice?.fallbackProviderName && <> Fallback: <strong>{advice.fallbackProviderName}</strong>{advice.recommendationResetsAt ? ` until ${new Date(advice.recommendationResetsAt).toLocaleString()}` : " while the primary recovers"}.</>}
             </p>
+          </section>
+          <section>
+            <div className="section-title">
+              <h2>Alert inbox</h2>
+              <span>
+                {alerts
+                  ? `${alerts.active.length} active · deduplicated per provider, window, and reset cycle`
+                  : "watching collector refreshes"}
+              </span>
+            </div>
+            <ol className="reset-timeline">
+              {(alerts?.active ?? []).map((alert) => (
+                <li key={alert.id}>
+                  <strong>{alert.providerName}</strong>
+                  <span>{alert.message}</span>
+                  <Status tone={alert.severity === "critical" ? "error" : "warn"}>
+                    {alert.rule}
+                  </Status>
+                </li>
+              ))}
+              {alerts && !alerts.active.length && (
+                <li className="muted">
+                  No watch rules are firing — every threshold, forecast,
+                  collector heartbeat, and login is clear.
+                </li>
+              )}
+              {!alerts && (
+                <li className="muted">Loading alert history…</li>
+              )}
+            </ol>
+            {!!alerts?.recent.length && (
+              <details className="alert-history">
+                <summary>{alerts.recent.length} recovered or resolved recently</summary>
+                <ol className="reset-timeline">
+                  {alerts.recent.map((alert) => (
+                    <li key={alert.id}>
+                      <strong>{alert.providerName}</strong>
+                      <span>{alert.message}</span>
+                      <Status tone="ok">
+                        cleared{" "}
+                        {alert.resolvedAt
+                          ? new Date(alert.resolvedAt).toLocaleString()
+                          : ""}
+                      </Status>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
+          </section>
+          <section>
+            <div className="section-title">
+              <h2>Depletion forecasts</h2>
+              <span>projected from snapshots within the current reset cycle</span>
+            </div>
+            <ol className="reset-timeline">
+              {(alerts?.forecasts ?? []).map((forecast) => {
+                const key = `${forecast.providerId}-${forecast.windowLabel}`;
+                const state = !forecast.sufficient
+                  ? forecast.samples > 0
+                    ? "insufficient history"
+                    : "no samples yet"
+                  : forecast.projectedExhaustionAt &&
+                      forecast.resetsAt &&
+                      Date.parse(forecast.projectedExhaustionAt) <
+                        Date.parse(forecast.resetsAt)
+                    ? `exhausts in ${duration(Date.parse(forecast.projectedExhaustionAt) - nowMs)}`
+                    : "outlasts this reset";
+                return (
+                  <li key={key}>
+                    <strong>{forecast.providerName}</strong>
+                    <span>{forecast.windowLabel}</span>
+                    <Status
+                      tone={
+                        !forecast.sufficient
+                          ? "warn"
+                          : state.startsWith("exhausts")
+                            ? "error"
+                            : "ok"
+                      }
+                    >
+                      {state}
+                    </Status>
+                  </li>
+                );
+              })}
+              {!alerts?.forecasts.length && (
+                <li className="muted">
+                  No reported limit windows to forecast.
+                </li>
+              )}
+            </ol>
           </section>
           <section>
             <div className="section-title">

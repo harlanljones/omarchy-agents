@@ -286,6 +286,12 @@ Borders are thin and low-contrast. Large panels are not rounded containers; the 
 - **Mobile:** Replace the left rail with a fixed four-column bottom bar. The active label turns gold; content receives bottom clearance and safe-area padding.
 - **Limits portal:** The admin limits destination uses a compact ruled tab strip for Limits, Productivity, Activity detail, and Source sync. Tabs preserve the same selected-state treatment and remain keyboard-operable.
 
+### Limits Watch
+
+- **Alert inbox:** Active alerts reuse the reset-timeline row grid — provider mark and name, the alert's message, then a semantic status chip (`warning` amber, `critical` red) naming the rule. Resolved history collapses behind a quiet `details` summary so an all-clear board stays calm.
+- **Depletion forecasts:** One row per reported window in the same grid. Insufficient history renders as an amber "insufficient history" state — never as a fabricated countdown; a projection that lands before the reset reads red with the time-to-exhaustion, and one that outlasts the cycle reads green.
+- **Truthfulness:** Forecast language never presents a single sample or unknown reset instant as certainty, matching the portal-wide rule that every claim traces to evidence.
+
 ### Standings and History
 
 - **Rows:** A semantic table rendered as a five-column grid on desktop, with a 35px header and at least 63px per data row. Rank and token values use the data face; provider name remains sans-serif.

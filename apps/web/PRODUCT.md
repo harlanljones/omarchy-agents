@@ -16,7 +16,7 @@ One private user reviewing personal AI-agent usage from the desktop or an authen
 
 ## Product Purpose
 
-Unify provider standings, historical trends, searchable redacted transcripts, a citation-bound local analyst, and an admin limits portal that ranks subscription headroom, counts down refreshes, prices tasks at reference API rates, and recommends which platform to run next. Success means a ranking can be traced to local evidence, an analyst claim can be opened at the exact session event that supports it, and every limit claim traces to a collector record.
+Unify provider standings, historical trends, searchable redacted transcripts, a citation-bound local analyst, and an admin limits portal that ranks subscription headroom, counts down refreshes, projects window depletion, raises deduplicated lockout alerts, prices tasks at reference API rates, and recommends which platform to run next. Success means a ranking can be traced to local evidence, an analyst claim can be opened at the exact session event that supports it, and every limit claim traces to a collector record.
 
 ## Positioning
 
@@ -37,6 +37,7 @@ The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, 
 - Remote requests require a valid Cloudflare Access JWT for the configured allow-listed email; loopback use remains unauthenticated.
 - The limits portal is a separate, stricter trust tier enforced at the origin: the tunnel hostname sits behind one Access application (page, assets, and API share a session), the portal additionally requires the admin audience and rejects service tokens by claim, the Worker host redirects `/limits*` to it, and it fails closed when unconfigured.
 - The limits portal provides four admin views: subscription limits, descriptive productivity comparisons, public activity detail, and cached GitHub/Linear source synchronization. Activity detail is inspectable source evidence only; it never infers session-to-repository attribution.
+- The limits watch observes every collector refresh: it persists per-window snapshots, projects depletion from at least two samples in the same reset cycle (otherwise it reports insufficient history), and fires conservative alerts — 20% remaining, 10% remaining, exhausted, projected exhaustion, stale collector, authentication failure — deduplicated per provider, window, and reset cycle on the dashboard inbox plus local desktop notifications with recovery notices. Snapshots and alert history are retained for 90 days and never backfilled.
 
 ## Brand Commitments
 

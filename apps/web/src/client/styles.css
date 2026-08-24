@@ -1597,6 +1597,14 @@ select {
   display: block;
   color: var(--dim);
 }
+.alert-history {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.alert-history summary {
+  cursor: pointer;
+}
 .table-scroll {
   overflow-x: auto;
 }

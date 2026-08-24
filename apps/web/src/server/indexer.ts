@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { Database as SourceDatabase } from "bun:sqlite";
 import { db } from "./db";
 import { redact } from "./redact";
-import { LogEvent, NormalizedSession, UsageRecordV1, type Event, type Session } from "../shared/schemas";
+import { observeUsageRecords } from "./watch";
+import { LogEvent, NormalizedSession, UsageRecordV1, type Event, type Session, type UsageRecord } from "../shared/schemas";
 
 const home = process.env.HOME ?? "";
 const roots = [
@@ -147,11 +148,16 @@ export function persist(session: Session, events: Event[]) {
 
 function refreshUsage() {
   if (!existsSync(usageDir)) return;
+  const observed: UsageRecord[] = [];
   for (const name of readdirSync(usageDir).filter(n => n.endsWith(".json"))) {
     const path = join(usageDir, name);
-    try { const record = UsageRecordV1.parse(JSON.parse(readFileSync(path, "utf8"))); db.query("INSERT INTO usage_records VALUES (?,?,?) ON CONFLICT(provider) DO UPDATE SET record_json=excluded.record_json,updated_at=excluded.updated_at").run(record.id, JSON.stringify(record), new Date().toISOString()); }
+    try { const record = UsageRecordV1.parse(JSON.parse(readFileSync(path, "utf8"))); db.query("INSERT INTO usage_records VALUES (?,?,?) ON CONFLICT(provider) DO UPDATE SET record_json=excluded.record_json,updated_at=excluded.updated_at").run(record.id, JSON.stringify(record), new Date().toISOString()); observed.push(record); }
     catch (error) { db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(path, name.slice(0, -5), String(error), new Date().toISOString()); }
   }
+  // Every collector refresh feeds the limit watch: snapshots, forecasts,
+  // alerts, and their desktop notifications all flow from what we just read.
+  try { void observeUsageRecords(observed); }
+  catch (error) { db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(usageDir, "watch", String(error), new Date().toISOString()); }
 }
 
 function indexOpenCode() {
