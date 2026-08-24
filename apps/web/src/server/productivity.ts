@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { db } from "./db";
-import type { ProductivityResponse, ProductivitySourceState } from "../shared/schemas";
+import type { ProductivityActivityResponse, ProductivityResponse, ProductivitySourceState } from "../shared/schemas";
 
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 export type ProductivityConfig = {
@@ -487,6 +487,32 @@ export function productivityResponse(options: {
     filters: { repo, team },
     sources: productivitySourceStates(database, config, now),
   };
+}
+
+export function productivityActivity(options: {
+  database?: Database;
+  config?: ProductivityConfig;
+  query?: { from?: string; to?: string; repo?: string; team?: string };
+  now?: Date;
+} = {}): ProductivityActivityResponse {
+  const database = options.database ?? db;
+  const config = options.config ?? productivityConfig();
+  const now = options.now ?? new Date();
+  const query = options.query ?? {};
+  const range = resolveProductivityRange(query, config.timeZone, now);
+  const approxSince = new Date(Date.parse(`${range.from}T00:00:00Z`) - DAY_MS).toISOString();
+  const approxUntil = new Date(Date.parse(`${range.to}T00:00:00Z`) + 2 * DAY_MS).toISOString();
+  const repo = query.repo?.trim() || null;
+  const team = query.team?.trim() || null;
+  const commits = (database.query("SELECT sha,repository,commit_date, url FROM github_commits WHERE commit_date>=? AND commit_date<? ORDER BY commit_date DESC LIMIT 500").all(approxSince, approxUntil) as Array<{ sha: string; repository: string; commit_date: string; url: string }>)
+    .filter((row) => dayInTimeZone(row.commit_date, config.timeZone) >= range.from && dayInTimeZone(row.commit_date, config.timeZone) <= range.to)
+    .filter((row) => !repo || row.repository.toLowerCase() === repo.toLowerCase())
+    .map((row) => ({ sha: row.sha, repository: row.repository, committedAt: row.commit_date, url: row.url }));
+  const tasks = (database.query("SELECT issue_id,identifier,team_id,team,title,completion_date,url FROM linear_tasks WHERE completion_date>=? AND completion_date<? ORDER BY completion_date DESC LIMIT 500").all(approxSince, approxUntil) as Array<{ issue_id: string; identifier: string; team_id: string; team: string; title: string; completion_date: string; url: string }>)
+    .filter((row) => dayInTimeZone(row.completion_date, config.timeZone) >= range.from && dayInTimeZone(row.completion_date, config.timeZone) <= range.to)
+    .filter((row) => !team || row.team_id === team || row.team.toLowerCase() === team.toLowerCase())
+    .map((row) => ({ issueId: row.issue_id, identifier: row.identifier, teamId: row.team_id, team: row.team, title: row.title, completedAt: row.completion_date, url: row.url }));
+  return { range, generatedAt: now.toISOString(), filters: { repo, team }, commits, tasks };
 }
 
 let activeSync: Promise<Awaited<ReturnType<typeof runProductivitySync>>> | null = null;

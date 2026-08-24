@@ -5,7 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Group } from "@visx/group";
 import { BarStack } from "@visx/shape";
 import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
-import type { AdviceRow, AdviceVerdict, LimitsBoard, LimitWindowView, PricingEntry, ProductivityResponse } from "../shared/schemas";
+import type { AdviceRow, AdviceVerdict, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
 import "./styles.css";
 
 type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
@@ -1542,14 +1542,177 @@ const sourceTone = (status: ProductivityResponse["sources"][number]["status"]) =
       ? "warn"
       : "error";
 
+function SourceLedger({ sources }: { sources: ProductivityResponse["sources"] }) {
+  return (
+    <div className="source-ledger">
+      {sources.map((source) => (
+        <div key={source.id} className="source-row">
+          <div><strong>{source.name}</strong><span>{source.recordCount} cached records</span></div>
+          <Status tone={sourceTone(source.status)}>{source.status}</Status>
+          <span>{source.coverage ? `${source.coverage.from}—${source.coverage.to}` : "coverage unavailable"}</span>
+          <time dateTime={source.lastSyncedAt ?? undefined}>{source.lastSyncedAt ? new Date(source.lastSyncedAt).toLocaleString() : "never synced"}</time>
+          {source.error && <p>{source.error}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SourceSyncView() {
+  const [data, setData] = useState<ProductivityResponse | null>(null),
+    [loading, setLoading] = useState(true),
+    [syncing, setSyncing] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await api<ProductivityResponse>("/limits/api/productivity"));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const sync = async () => {
+    setSyncing(true);
+    setNotice("Synchronizing GitHub and Linear on the server…");
+    try {
+      const result = await api<{ sources: ProductivityResponse["sources"] }>("/limits/api/productivity/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      await load();
+      const unavailable = result.sources.filter((source) => source.status !== "fresh" && source.status !== "empty");
+      setNotice(unavailable.length
+        ? `Sync finished with source warnings: ${unavailable.map((source) => `${source.name} is ${source.status}`).join("; ")}. Last successful cache remains available where present.`
+        : "GitHub and Linear cache is up to date.");
+    } catch (caught) {
+      setNotice(`Sync could not finish: ${caught instanceof Error ? caught.message : String(caught)}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="source-sync-view" aria-busy={loading}>
+      <header className="pagehead productivity-head">
+        <div>
+          <h1>Source sync</h1>
+          <p>Review cached GitHub and Linear coverage. External services are contacted only by the server.</p>
+        </div>
+        <Button onClick={() => void sync()} disabled={syncing}>{syncing ? "Syncing sources…" : "Sync sources"}</Button>
+      </header>
+      {notice && <p className="notice" role="status">{notice}</p>}
+      {error && <p className="notice error" role="alert">{error} Check source configuration, then try again.</p>}
+      {loading && !data && <section className="productivity-loading" aria-label="Loading source status"><Sk w={240} /><Sk w={520} /></section>}
+      {data && (
+        <section aria-labelledby="source-state-title">
+          <div className="section-title"><h2 id="source-state-title">Source state</h2><span>cached reads · six-hour server refresh</span></div>
+          <SourceLedger sources={data.sources} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ActivityDetailView() {
+  const requestedRange = Number(new URLSearchParams(window.location.search).get("range"));
+  const [rangeDays, setRangeDays] = useState<7 | 30 | 90>([7, 30, 90].includes(requestedRange) ? requestedRange as 7 | 30 | 90 : 30),
+    [data, setData] = useState<ProductivityActivityResponse | null>(null),
+    [repo, setRepo] = useState(new URLSearchParams(window.location.search).get("repo") ?? ""),
+    [team, setTeam] = useState(new URLSearchParams(window.location.search).get("team") ?? ""),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+
+  const writeUrl = (days: 7 | 30 | 90, nextRepo = repo, nextTeam = team) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "activity");
+    params.set("range", String(days));
+    nextRepo.trim() ? params.set("repo", nextRepo.trim()) : params.delete("repo");
+    nextTeam.trim() ? params.set("team", nextTeam.trim()) : params.delete("team");
+    window.history.replaceState({}, "", `${window.location.pathname}?${params}`);
+  };
+
+  const load = async (days: 7 | 30 | 90, nextRepo = repo, nextTeam = team, updateUrl = false) => {
+    setLoading(true);
+    setError("");
+    try {
+      const anchor = await api<ProductivityActivityResponse>("/limits/api/productivity/activity");
+      const query = new URLSearchParams({
+        from: days === 30 ? anchor.range.from : calendarShift(anchor.range.to, -(days - 1)),
+        to: anchor.range.to,
+      });
+      if (nextRepo.trim()) query.set("repo", nextRepo.trim());
+      if (nextTeam.trim()) query.set("team", nextTeam.trim());
+      const next = days === 30 && !nextRepo.trim() && !nextTeam.trim()
+        ? anchor
+        : await api<ProductivityActivityResponse>(`/limits/api/productivity/activity?${query}`);
+      setData(next);
+      setRangeDays(days);
+      setRepo(nextRepo);
+      setTeam(nextTeam);
+      if (updateUrl) writeUrl(days, nextRepo, nextTeam);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(rangeDays, repo, team); }, []);
+
+  const applyFilters = () => void load(rangeDays, repo, team, true);
+  const changeRange = (days: 7 | 30 | 90) => { if (!loading) void load(days, repo, team, true); };
+  const fmtDate = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+  return (
+    <div className="activity-view" aria-busy={loading}>
+      <header className="pagehead productivity-head">
+        <div>
+          <h1>Activity detail</h1>
+          <p>Inspect the public records behind the productivity comparison. No session-to-repository attribution is inferred.</p>
+        </div>
+      </header>
+      <div className="activity-controls">
+        <div className="segmented" role="group" aria-label="Activity range">
+          {([7, 30, 90] as const).map((days) => <button key={days} aria-pressed={rangeDays === days} disabled={loading} onClick={() => changeRange(days)}>{days} days</button>)}
+        </div>
+        <label>Repository<input value={repo} onChange={(event) => setRepo(event.target.value)} placeholder="owner/repository" /></label>
+        <label>Linear team<input value={team} onChange={(event) => setTeam(event.target.value)} placeholder="team name or ID" /></label>
+        <Button onClick={applyFilters} disabled={loading}>Apply filters</Button>
+      </div>
+      {error && <p className="notice error" role="alert">{error}</p>}
+      {data && <div className="activity-grid">
+        <section aria-labelledby="commit-detail-title">
+          <div className="section-title"><h2 id="commit-detail-title">Public commits</h2><span>{data.commits.length} records · {data.range.from}—{data.range.to}</span></div>
+          <div className="activity-list">
+            {data.commits.length ? data.commits.map((commit) => <article key={commit.sha}><div><strong>{commit.repository}</strong><span>{commit.sha.slice(0, 10)} · {fmtDate(commit.committedAt)}</span></div><a href={commit.url} target="_blank" rel="noreferrer">Open commit</a></article>) : <p>No public commits match these filters.</p>}
+          </div>
+        </section>
+        <section aria-labelledby="task-detail-title">
+          <div className="section-title"><h2 id="task-detail-title">Completed Linear tasks</h2><span>{data.tasks.length} records · {data.range.from}—{data.range.to}</span></div>
+          <div className="activity-list">
+            {data.tasks.length ? data.tasks.map((task) => <article key={task.issueId}><div><strong>{task.identifier} · {task.title}</strong><span>{task.team} · {fmtDate(task.completedAt)}</span></div>{task.url && <a href={task.url} target="_blank" rel="noreferrer">Open task</a>}</article>) : <p>No completed tasks match these filters.</p>}
+          </div>
+        </section>
+      </div>}
+    </div>
+  );
+}
+
 function ProductivityView() {
   const requestedRange = Number(new URLSearchParams(window.location.search).get("range"));
   const [rangeDays, setRangeDays] = useState<7 | 30 | 90>([7, 30, 90].includes(requestedRange) ? requestedRange as 7 | 30 | 90 : 30),
     [data, setData] = useState<ProductivityResponse | null>(null),
     [loading, setLoading] = useState(true),
-    [syncing, setSyncing] = useState(false),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [error, setError] = useState("");
 
   const writeRangeToUrl = (days: 7 | 30 | 90) => {
     const params = new URLSearchParams(window.location.search);
@@ -1584,28 +1747,6 @@ function ProductivityView() {
     if (days !== rangeDays && !loading) void load(days, data, true);
   };
 
-  const sync = async () => {
-    setSyncing(true);
-    setNotice("Synchronizing GitHub and Linear on the server…");
-    try {
-      const result = await api<{ sources: ProductivityResponse["sources"] }>("/limits/api/productivity/sync", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-      setNotice("Source cache refreshed. Loading the latest comparison…");
-      await load(rangeDays, data);
-      const unavailable = result.sources.filter((source) => source.status !== "fresh" && source.status !== "empty");
-      setNotice(unavailable.length
-        ? `Sync finished with source warnings: ${unavailable.map((source) => `${source.name} is ${source.status}`).join("; ")}. Last successful cache remains available where present.`
-        : "GitHub and Linear cache is up to date.");
-    } catch (caught) {
-      setNotice(`Sync could not finish: ${caught instanceof Error ? caught.message : String(caught)}`);
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const fmtExact = (value: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
   const formatRatio = (value: number | null) => value == null ? "Unavailable" : `${fmt.format(value)} tokens`;
   const start = data?.range.from ? new Date(`${data.range.from}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
@@ -1620,7 +1761,6 @@ function ProductivityView() {
           <h1>Tokens vs productivity</h1>
           <p>Daily token use beside public commits and completed Linear tasks. This is descriptive evidence, not a productivity score.</p>
         </div>
-        <Button onClick={() => void sync()} disabled={syncing}>{syncing ? "Syncing sources…" : "Sync sources"}</Button>
       </header>
       <div className="productivity-controls">
         <div className="segmented" role="group" aria-label="Comparison range">
@@ -1630,7 +1770,6 @@ function ProductivityView() {
         </div>
         {data && <span>{data.range.from}—{data.range.to} · {data.range.timeZone}</span>}
       </div>
-      {notice && <p className="notice" role="status">{notice}</p>}
       {error && <p className="notice error" role="alert">{error} Check source configuration, then try again.</p>}
       {loading && !data && <section className="productivity-loading" aria-label="Loading comparison"><Sk w={240} /><Sk w={520} /><Sk w={420} /></section>}
       {data && (
@@ -1669,20 +1808,6 @@ function ProductivityView() {
               <div className="breakdown"><h3>Linear teams</h3>{data.tasks.teams.length ? <ol>{data.tasks.teams.map((team) => <li key={team.id}><span>{team.team}</span><b>{team.count}</b></li>)}</ol> : <p>No completed tasks recorded for this range.</p>}</div>
             </div>
           </section>
-          <section aria-labelledby="source-state-title">
-            <div className="section-title"><h2 id="source-state-title">Source state</h2><span>cached reads · six-hour server refresh</span></div>
-            <div className="source-ledger">
-              {data.sources.map((source) => (
-                <div key={source.id} className="source-row">
-                  <div><strong>{source.name}</strong><span>{source.recordCount} cached records</span></div>
-                  <Status tone={sourceTone(source.status)}>{source.status}</Status>
-                  <span>{source.coverage ? `${source.coverage.from}—${source.coverage.to}` : "coverage unavailable"}</span>
-                  <time dateTime={source.lastSyncedAt ?? undefined}>{source.lastSyncedAt ? new Date(source.lastSyncedAt).toLocaleString() : "never synced"}</time>
-                  {source.error && <p>{source.error}</p>}
-                </div>
-              ))}
-            </div>
-          </section>
         </>
       )}
     </div>
@@ -1690,29 +1815,52 @@ function ProductivityView() {
 }
 
 function Limits() {
-  const viewFromUrl = () => new URLSearchParams(window.location.search).get("view") === "productivity" ? "productivity" : "limits";
-  const [view, setView] = useState<"limits" | "productivity">(viewFromUrl);
+  type PortalView = "limits" | "productivity" | "activity" | "sources";
+  const viewFromUrl = (): PortalView => {
+    const value = new URLSearchParams(window.location.search).get("view");
+    return value === "productivity" || value === "activity" || value === "sources" ? value : "limits";
+  };
+  const [view, setView] = useState<PortalView>(viewFromUrl);
   useEffect(() => {
     const sync = () => setView(viewFromUrl());
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
-  const select = (next: "limits" | "productivity") => {
+  const select = (next: PortalView) => {
     const params = new URLSearchParams(window.location.search);
-    if (next === "productivity") params.set("view", "productivity");
-    else { params.delete("view"); params.delete("range"); }
+    if (next === "limits") { params.delete("view"); params.delete("range"); }
+    else {
+      params.set("view", next);
+      if (next === "sources") params.delete("range");
+    }
     const query = params.toString();
     window.history.pushState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     setView(next);
   };
+  const moveTab = (event: React.KeyboardEvent, current: PortalView) => {
+    const order: PortalView[] = ["limits", "productivity", "activity", "sources"];
+    const index = order.indexOf(current);
+    const nextIndex = event.key === "ArrowRight" || event.key === "ArrowDown"
+      ? (index + 1) % order.length
+      : event.key === "ArrowLeft" || event.key === "ArrowUp"
+        ? (index + order.length - 1) % order.length
+        : event.key === "Home" ? 0 : event.key === "End" ? order.length - 1 : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const next = order[nextIndex];
+    select(next);
+    requestAnimationFrame(() => document.getElementById(`${next}-tab`)?.focus());
+  };
   return (
     <div className="limits">
       <div className="portal-tabs" role="tablist" aria-label="Limits portal views">
-        <button id="limits-tab" role="tab" aria-selected={view === "limits"} aria-controls="limits-panel" onClick={() => select("limits")}>Limits</button>
-        <button id="productivity-tab" role="tab" aria-selected={view === "productivity"} aria-controls="productivity-panel" onClick={() => select("productivity")}>Tokens vs productivity</button>
+        <button id="limits-tab" role="tab" tabIndex={view === "limits" ? 0 : -1} aria-selected={view === "limits"} aria-controls="limits-panel" onKeyDown={(event) => moveTab(event, "limits")} onClick={() => select("limits")}>Limits</button>
+        <button id="productivity-tab" role="tab" tabIndex={view === "productivity" ? 0 : -1} aria-selected={view === "productivity"} aria-controls="productivity-panel" onKeyDown={(event) => moveTab(event, "productivity")} onClick={() => select("productivity")}>Productivity</button>
+        <button id="activity-tab" role="tab" tabIndex={view === "activity" ? 0 : -1} aria-selected={view === "activity"} aria-controls="activity-panel" onKeyDown={(event) => moveTab(event, "activity")} onClick={() => select("activity")}>Activity detail</button>
+        <button id="sources-tab" role="tab" tabIndex={view === "sources" ? 0 : -1} aria-selected={view === "sources"} aria-controls="sources-panel" onKeyDown={(event) => moveTab(event, "sources")} onClick={() => select("sources")}>Source sync</button>
       </div>
-      <div id={view === "limits" ? "limits-panel" : "productivity-panel"} role="tabpanel" aria-labelledby={view === "limits" ? "limits-tab" : "productivity-tab"}>
-        {view === "limits" ? <LimitsBoardView /> : <ProductivityView />}
+      <div id={`${view}-panel`} role="tabpanel" aria-labelledby={`${view}-tab`}>
+        {view === "limits" ? <LimitsBoardView /> : view === "productivity" ? <ProductivityView /> : view === "activity" ? <ActivityDetailView /> : <SourceSyncView />}
       </div>
     </div>
   );

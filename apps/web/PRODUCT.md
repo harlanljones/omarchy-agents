@@ -36,6 +36,7 @@ The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, 
 - Suggestions may be opened, accepted, or dismissed but never mutate agent files or settings.
 - Remote requests require a valid Cloudflare Access JWT for the configured allow-listed email; loopback use remains unauthenticated.
 - The limits portal is a separate, stricter trust tier enforced at the origin: the tunnel hostname sits behind one Access application (page, assets, and API share a session), the portal additionally requires the admin audience and rejects service tokens by claim, the Worker host redirects `/limits*` to it, and it fails closed when unconfigured.
+- The limits portal provides four admin views: subscription limits, descriptive productivity comparisons, public activity detail, and cached GitHub/Linear source synchronization. Activity detail is inspectable source evidence only; it never infers session-to-repository attribution.
 
 ## Brand Commitments
 

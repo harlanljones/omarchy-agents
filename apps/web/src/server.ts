@@ -10,7 +10,7 @@ import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/li
 import { effectivePricingTable, pricingOverrideError } from "./server/pricing";
 import { UsageRecordV1 } from "./shared/schemas";
 import { analyzePrompt } from "./server/prompt-analysis";
-import { productivityResponse, startProductivitySync, syncProductivitySources } from "./server/productivity";
+import { productivityActivity, productivityResponse, startProductivitySync, syncProductivitySources } from "./server/productivity";
 
 const app = new Hono(); app.use("*", security);
 app.use("/limits", requireAdmin);
@@ -69,6 +69,18 @@ app.get("/limits/api/pricing", c => c.json({ asOfNote: "Reference API rates; ove
 app.get("/limits/api/productivity", c => {
   try {
     return c.json(productivityResponse({ query: {
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      repo: c.req.query("repo"),
+      team: c.req.query("team"),
+    } }));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+app.get("/limits/api/productivity/activity", c => {
+  try {
+    return c.json(productivityActivity({ query: {
       from: c.req.query("from"),
       to: c.req.query("to"),
       repo: c.req.query("repo"),

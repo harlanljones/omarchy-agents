@@ -284,6 +284,7 @@ Borders are thin and low-contrast. Large panels are not rounded containers; the 
 - **Desktop:** A persistent left rail centers the trophy lockup, icon-and-label destinations, and local-first status. Destinations use a 12px hit surface; the active item gains raised graphite while the icon frame turns gold.
 - **Tablet:** The left rail remains at a reduced width while analyst content moves into a modal drawer.
 - **Mobile:** Replace the left rail with a fixed four-column bottom bar. The active label turns gold; content receives bottom clearance and safe-area padding.
+- **Limits portal:** The admin limits destination uses a compact ruled tab strip for Limits, Productivity, Activity detail, and Source sync. Tabs preserve the same selected-state treatment and remain keyboard-operable.
 
 ### Standings and History
 

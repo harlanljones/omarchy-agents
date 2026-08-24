@@ -119,6 +119,8 @@ describe("productivity endpoint boundary", () => {
   test("accepts an admin audience for cached productivity data", async () => {
     const response = await get("/limits/api/productivity", "127.0.0.1", await signToken("aud-admin-a"));
     expect(response.status).toBe(200);
+    const activity = await get("/limits/api/productivity/activity", "127.0.0.1", await signToken("aud-admin-a"));
+    expect(activity.status).toBe(200);
   });
 
   test("accepts an admin sync request while sources are unconfigured", async () => {

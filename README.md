@@ -2,7 +2,7 @@
 
 Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https://omarchy.org).
 
-- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. A Cloudflare Access–gated limits portal ranks session, weekly, and monthly allowances across subscriptions, counts down to each refresh, prices tasks at reference API rates, and recommends which platform to run next. The Analyst page also provides local prompt analysis: it scores task complexity, explains required capabilities, and compares model/provider cost, latency, confidence, and fallback fit without changing configuration. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
+- **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. Its Cloudflare Access–gated limits portal now has four operational tabs: limits, descriptive token/productivity comparisons, cached GitHub/Linear source synchronization, and activity detail for inspecting public commits and completed tasks. The Analyst page also provides local prompt analysis: it scores task complexity, explains required capabilities, and compares model/provider cost, latency, confidence, and fallback fit without changing configuration. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).
 - **Agent leaderboard** (`apps/omarchy-agent-leaderboard`) — Omarchy bar widget ranking token usage across every coding agent on the machine. Forked from `mustafaokur.agent-leaderboard` (MIT).
 - **Agent usage** (`apps/omarchy-agent-usage`) — fork of Omarchy's first-party Agents widget focused on per-provider usage and limits.
 - **Provider assets** (`packages/provider-assets`) — single source for provider marks; each app consumes them through a repository-relative symlink, and plugin builds dereference the link so deployed plugin directories stay self-contained.
@@ -33,6 +33,20 @@ Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https
       <td align="center">
         <img src="docs/screenshots/prompt-analysis-evidence.png" alt="Prompt analysis with expanded complexity evidence" width="600">
         <br><sub>Prompt analysis — expanded evidence and uncertainty</sub>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <img src="docs/screenshots/activity-detail.png" alt="Activity detail tab showing public GitHub commits and completed Linear tasks" width="600">
+        <br><sub>Activity detail — inspect public commits and completed tasks</sub>
+      </td>
+      <td align="center">
+        <img src="docs/screenshots/source-sync.png" alt="Source sync tab showing GitHub and Linear freshness and coverage" width="600">
+        <br><sub>Source sync — freshness, coverage, and cached record state</sub>
+      </td>
+      <td align="center">
+        <img src="docs/screenshots/activity-detail-mobile.png" alt="Activity detail tab on a mobile viewport" width="230">
+        <br><sub>Activity detail — responsive mobile view</sub>
       </td>
     </tr>
   </table>

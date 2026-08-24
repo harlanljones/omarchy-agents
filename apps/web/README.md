@@ -12,7 +12,22 @@ This app is developed from the workspace root. Use `bun run dev --filter=@omarch
 
 ![Prompt analysis with expanded complexity evidence](../../docs/screenshots/prompt-analysis-evidence.png)
 
+![Activity detail showing public GitHub commits and completed Linear tasks](../../docs/screenshots/activity-detail.png)
+
+![Source sync showing GitHub and Linear freshness and coverage](../../docs/screenshots/source-sync.png)
+
 The dashboard combines local usage indexing, provider comparisons, transcript evidence, and the citation-bound analyst in one view.
+
+### Limits and productivity portal
+
+The admin-only `/limits` portal is organized as four tabs:
+
+- **Limits** ranks subscription headroom and task fit using the existing collector records.
+- **Productivity** compares canonical indexed token totals with daily public GitHub commits and completed Linear tasks. The ratios are descriptive and explicitly non-causal.
+- **Activity detail** lists the cached public commit and completed-task records behind that comparison. It supports 7-, 30-, and 90-day ranges plus repository and Linear-team filters, and links to the public source records.
+- **Source sync** reports GitHub and Linear configuration, cache freshness, coverage, rate limits, and errors. The **Sync sources** action runs on the server; browser page loads never call external APIs directly.
+
+The portal automatically refreshes configured sources every six hours, syncs missing or stale caches at startup, and retains the last successful cache when a refresh fails. No session is matched to a repository or task, and no private task descriptions or raw API payloads are exposed to the browser.
 
 ### Prompt analysis
 
@@ -57,7 +72,7 @@ The advisor ranks platforms by binding headroom (smallest session/weekly/monthly
 
 Pricing comes from a built-in table snapshot (`PRICING_AS_OF`) of reference per-token rates. To correct or extend it, create `~/.config/omarchy-agents/pricing.json` (or point `OMARCHY_AGENTS_CONFIG` at another file) mapping model names or prefixes to `{ input, output, cacheRead }` dollar rates per million tokens, or `null` to mark a model unpriced. Overrides take precedence over built-ins and appear tagged on the pricing page.
 
-`/limits?view=productivity` compares indexed daily token totals with cached public GitHub commits and completed Linear tasks. Configure `PRODUCTIVITY_GITHUB_OWNER`, `PRODUCTIVITY_GITHUB_OWNER_TYPE` (`user` or `org`), optional comma-separated `PRODUCTIVITY_GITHUB_REPOS`, `LINEAR_API_KEY`, comma-separated `PRODUCTIVITY_LINEAR_TEAM_IDS`, and optional `PRODUCTIVITY_TIME_ZONE` (defaults to `America/Los_Angeles`) in `dashboard.env`. The ignored `.linear.toml` file is not read by the application. Page loads remain cache-only; the server refreshes configured sources every six hours (and immediately at startup when the cache is missing or stale), while the admin-only **Sync sources** action refreshes them on demand. A failed source refresh retains its last successful cache and reports the source as stale, rate-limited, or unavailable.
+`/limits?view=productivity` opens the Productivity tab and `/limits?view=activity` opens Activity detail. Configure `PRODUCTIVITY_GITHUB_OWNER`, `PRODUCTIVITY_GITHUB_OWNER_TYPE` (`user` or `org`), optional comma-separated `PRODUCTIVITY_GITHUB_REPOS`, `LINEAR_API_KEY`, comma-separated `PRODUCTIVITY_LINEAR_TEAM_IDS`, and optional `PRODUCTIVITY_TIME_ZONE` (defaults to `America/Los_Angeles`) in `dashboard.env`. The ignored `.linear.toml` file is not read by the application. Page loads remain cache-only; the server refreshes configured sources every six hours (and immediately at startup when the cache is missing or stale), while the admin-only **Sync sources** action refreshes them on demand. A failed source refresh retains its last successful cache and reports the source as stale, rate-limited, or unavailable.
 
 ## Rollback
 

@@ -108,6 +108,19 @@ describe("daily productivity aggregation", () => {
   });
 });
 
+describe("activity detail", () => {
+  test("returns filtered cached commits and completed tasks without token attribution", () => {
+    const value = database();
+    value.query("INSERT INTO github_commits VALUES (?,?,?,?,?)").run("sha-1", "example/alpha", "2026-08-23T07:00:00Z", "https://github.test/sha-1", NOW.toISOString());
+    value.query("INSERT INTO github_commits VALUES (?,?,?,?,?)").run("sha-2", "example/beta", "2026-08-23T08:00:00Z", "https://github.test/sha-2", NOW.toISOString());
+    value.query("INSERT INTO linear_tasks VALUES (?,?,?,?,?,?,?,?)").run("issue-1", "ENG-1", "team-a", "Engineering", "Ship", "2026-08-23T09:00:00Z", "https://linear.test/ENG-1", NOW.toISOString());
+    const response = subject.productivityActivity({ database: value, config: config(), query: { from: "2026-08-23", to: "2026-08-23", repo: "example/alpha", team: "Engineering" }, now: NOW });
+    expect(response.commits.map((commit) => commit.sha)).toEqual(["sha-1"]);
+    expect(response.tasks.map((task) => task.identifier)).toEqual(["ENG-1"]);
+    expect("tokens" in response).toBe(false);
+  });
+});
+
 describe("source reliability states", () => {
   let value: Database;
   beforeEach(() => { value = database(); });

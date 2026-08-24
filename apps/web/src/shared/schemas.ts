@@ -134,6 +134,14 @@ export const ProductivityResponseV1 = z.object({
 });
 export type ProductivitySourceState = z.infer<typeof ProductivityResponseV1>["sources"][number];
 export type ProductivityResponse = z.infer<typeof ProductivityResponseV1>;
+export const ProductivityActivityResponseV1 = z.object({
+  range: z.object({ from: z.string(), to: z.string(), timeZone: z.string() }),
+  generatedAt: z.string(),
+  filters: z.object({ repo: z.string().nullable(), team: z.string().nullable() }),
+  commits: z.array(z.object({ sha: z.string(), repository: z.string(), committedAt: z.string(), url: z.string() })),
+  tasks: z.array(z.object({ issueId: z.string(), identifier: z.string(), teamId: z.string(), team: z.string(), title: z.string(), completedAt: z.string(), url: z.string() })),
+});
+export type ProductivityActivityResponse = z.infer<typeof ProductivityActivityResponseV1>;
 export type PromptComplexity = "low" | "medium" | "high";
 export type PromptAnalysis = {
   redactedPrompt: string, complexity: PromptComplexity, score: number,
