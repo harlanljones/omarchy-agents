@@ -46,6 +46,7 @@ const fmt = new Intl.NumberFormat("en", {
 });
 const duration = (ms: number) => {
   if (!(ms > 0)) return "now";
+  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`;
   const minutes = Math.floor(ms / 60000),
     hours = Math.floor(minutes / 60),
     days = Math.floor(hours / 24);
@@ -1099,7 +1100,12 @@ function LimitMeter({
     <span className={`limit-entry ${limitTone(w.used)}`}>
       {titled && w.title && <small className="limit-title">{w.title}</small>}
       <span className="meter" role="img" aria-label={`${w.title}: ${pct}% used`}>
-        <i style={{ width: `${Math.min(100, pct)}%`, background: colors[providerId] ?? "#77838d" }} />
+        <i
+          style={{
+            transform: `scaleX(${Math.min(100, pct) / 100})`,
+            background: colors[providerId] ?? "#77838d",
+          }}
+        />
         <em>{pct}%</em>
       </span>
       <small className="limit-reset">
@@ -1164,11 +1170,26 @@ function LimitsBoardView() {
     [notice, setNotice] = useState(""),
     [reload, setReload] = useState(0),
     [nowMs, setNowMs] = useState(() => Date.now()),
-    [copyState, setCopyState] = useState<"idle" | "copied" | "selected">("idle");
+    [copyState, setCopyState] = useState<"idle" | "copied" | "selected">("idle"),
+    [adviceResolved, setAdviceResolved] = useState(false);
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    let last = Date.now();
+    const timer = window.setInterval(() => {
+      const t = Date.now();
+      const urgent = (board?.platforms ?? []).some((p) =>
+        p.windows.some((w) => {
+          if (!w.resetsAt) return false;
+          const delta = Date.parse(w.resetsAt) - t;
+          return delta > 0 && delta < 120_000;
+        }),
+      );
+      if (urgent || t - last >= 30_000) {
+        last = t;
+        setNowMs(t);
+      }
+    }, 1_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [board]);
   useEffect(() => {
     setError("");
     api<LimitsBoard>("/limits/api/board")
@@ -1194,6 +1215,7 @@ function LimitsBoardView() {
     )
       .then((next) => {
         setAdvice(next);
+        setAdviceResolved(true);
         setCopyState("idle");
       })
       .catch(() => setAdvice(null));
@@ -1275,13 +1297,16 @@ function LimitsBoardView() {
             <h2 className="sr-only">Advisor verdict</h2>
             {advice ? (
               <>
-                <p className="verdict-line">{advice.verdictLine}</p>
+                <p className={`verdict-line${adviceResolved ? " resolved" : ""}`}>{advice.verdictLine}</p>
                 <span className="as-of">
                   as of {new Date(advice.generatedAt).toLocaleTimeString()} · confidence {advice.confidence}
                 </span>
               </>
             ) : (
-              <p className="verdict-line">Consulting local usage records…</p>
+              <p className="verdict-line">
+                Consulting local usage records
+                <span className="consult-cursor" aria-hidden="true" />
+              </p>
             )}
             <div className="segmented" role="group" aria-label="Task size">
               {(
@@ -1575,6 +1600,35 @@ function DailyBars({
   );
 }
 
+function CorrelationPlot({ title, points, tone }: {
+  title: string;
+  points: ProductivityResponse["correlations"]["tokensCommits"];
+  tone: "commits" | "tasks";
+}) {
+  const width = 520, height = 220, left = 42, right = 12, top = 18, bottom = 32;
+  const plotWidth = width - left - right, plotHeight = height - top - bottom;
+  const maxTokens = Math.max(1, ...points.map((point) => point.tokens));
+  const maxCount = Math.max(1, ...points.map((point) => point.count));
+  const active = points.filter((point) => point.tokens > 0 || point.count > 0).length;
+  return (
+    <figure className={`correlation-plot ${tone}`}>
+      <figcaption><strong>{title}</strong><span>{active} active days · tokens on x-axis</span></figcaption>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title}. ${active} active days plotted with tokens on the horizontal axis and activity count on the vertical axis.`}>
+        <line x1={left} y1={top} x2={left} y2={height - bottom} className="chart-rule" />
+        <line x1={left} y1={height - bottom} x2={width - right} y2={height - bottom} className="chart-rule" />
+        <text x={left - 8} y={top + 4} textAnchor="end" className="chart-label">{maxCount}</text>
+        <text x={left - 8} y={height - bottom + 4} textAnchor="end" className="chart-label">0</text>
+        <text x={left} y={height - 8} className="chart-label">0</text>
+        <text x={width - right} y={height - 8} textAnchor="end" className="chart-label">{maxTokens.toLocaleString()}</text>
+        {points.map((point) => <circle key={point.day} cx={left + (point.tokens / maxTokens) * plotWidth} cy={height - bottom - (point.count / maxCount) * plotHeight} r={point.tokens || point.count ? 3.5 : 2} className="correlation-point"><title>{point.day}: {point.tokens.toLocaleString()} tokens, {point.count} {tone}</title></circle>)}
+        <text x={width / 2} y={height - 1} textAnchor="middle" className="chart-label">tokens</text>
+        <text x="11" y={height / 2} textAnchor="middle" transform={`rotate(-90 11 ${height / 2})`} className="chart-label">{tone}</text>
+      </svg>
+      <table className="sr-only"><caption>{title} exact daily values</caption><thead><tr><th>Day</th><th>Tokens</th><th>{tone}</th></tr></thead><tbody>{points.map((point) => <tr key={point.day}><th>{point.day}</th><td>{point.tokens}</td><td>{point.count}</td></tr>)}</tbody></table>
+    </figure>
+  );
+}
+
 const sourceTone = (status: ProductivityResponse["sources"][number]["status"]) =>
   status === "fresh" || status === "empty"
     ? "ok"
@@ -1835,6 +1889,14 @@ function ProductivityView() {
               <thead><tr><th>Day</th><th>Tokens</th><th>Commits</th><th>Completed tasks</th></tr></thead>
               <tbody>{data.tokens.daily.map((row, index) => <tr key={row.day}><th>{row.day}</th><td>{row.tokens}</td><td>{data.commits.daily[index]?.count ?? 0}</td><td>{data.tasks.daily[index]?.count ?? 0}</td></tr>)}</tbody>
             </table>
+          </section>
+          <section aria-labelledby="correlations-title">
+            <div className="section-title"><h2 id="correlations-title">Token correlations</h2><span>one dot per day · descriptive only</span></div>
+            <div className="correlation-grid">
+              <CorrelationPlot title="Tokens ↔ commits" tone="commits" points={data.correlations.tokensCommits} />
+              <CorrelationPlot title="Tokens ↔ completed tasks" tone="tasks" points={data.correlations.tokensTasks} />
+            </div>
+            <p className="noncausal-note">Dots show daily co-occurrence, not attribution or causation. Hover a dot for its exact date and values.</p>
           </section>
           <section className="ratio-band" aria-labelledby="ratios-title">
             <div><h2 id="ratios-title">Descriptive ratios</h2><p>Normalized against activity counts in this range.</p></div>

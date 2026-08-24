@@ -1321,6 +1321,21 @@ select {
   font: 9px "IBM Plex Mono", monospace;
   pointer-events: none;
 }
+.correlation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.correlation-plot { margin: 0; min-width: 0; border-top: 1px solid var(--line); }
+.correlation-plot figcaption { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0 4px; }
+.correlation-plot figcaption strong { font: 600 13px "IBM Plex Mono", monospace; }
+.correlation-plot figcaption span, .chart-label { color: var(--dim); font: 9px "IBM Plex Mono", monospace; }
+.correlation-plot svg { display: block; width: 100%; height: 220px; overflow: visible; }
+.correlation-plot .chart-rule { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.correlation-point { fill: var(--ink); opacity: 0.78; }
+.correlation-plot.tasks .correlation-point { fill: var(--focus); }
+.correlation-plot .correlation-point:hover { opacity: 1; }
 .ratio-band {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(360px, 1.4fr);
@@ -1438,6 +1453,34 @@ select {
   margin: 0;
   font: 500 clamp(16px, 2vw, 21px) / 1.35 "IBM Plex Mono";
   letter-spacing: -0.01em;
+}
+.verdict-line.resolved {
+  animation: verdict-resolve 240ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes verdict-resolve {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.consult-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  margin-left: 7px;
+  vertical-align: -0.12em;
+  background: var(--ink);
+  animation: consult-blink 1.1s steps(2, start) infinite;
+}
+@keyframes consult-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .consult-cursor {
+    animation: none;
+  }
 }
 .verdict .as-of {
   grid-column: 1;
@@ -1625,10 +1668,29 @@ select {
   background: #14191c;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
+.meter::before,
+.meter::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(242, 244, 245, 0.14);
+  pointer-events: none;
+}
+.meter::before {
+  left: 80%;
+}
+.meter::after {
+  left: 95%;
+}
 .meter i {
   display: block;
+  width: 100%;
   height: 100%;
   opacity: 0.45;
+  transform-origin: 0 50%;
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .limit-entry.warn .meter i {
   opacity: 0.75;
@@ -1642,6 +1704,7 @@ select {
   position: absolute;
   right: 6px;
   top: 3px;
+  z-index: 1;
   font: normal 10px "IBM Plex Mono";
 }
 .balance,
@@ -1875,6 +1938,10 @@ select {
   }
   .shared-axis {
     margin-left: 92px;
+  }
+  .correlation-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
   .ratio-band,
   .ratio-band dl,

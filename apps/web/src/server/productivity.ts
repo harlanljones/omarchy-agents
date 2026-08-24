@@ -487,6 +487,10 @@ export function productivityResponse(options: {
       daily: days.map((day) => ({ day, count: taskByDay.get(day) ?? 0 })),
       teams: [...teamCounts.values()].sort((a, b) => b.count - a.count || a.team.localeCompare(b.team)),
     },
+    correlations: {
+      tokensCommits: days.map((day) => ({ day, tokens: tokenByDay.get(day) ?? 0, count: commitByDay.get(day) ?? 0 })),
+      tokensTasks: days.map((day) => ({ day, tokens: tokenByDay.get(day) ?? 0, count: taskByDay.get(day) ?? 0 })),
+    },
     ratios: { tokensPerCommit: descriptiveRatio(tokenTotal, commits.length), tokensPerTask: descriptiveRatio(tokenTotal, tasks.length) },
     filters: { repo, team },
     sources: productivitySourceStates(database, config, now),

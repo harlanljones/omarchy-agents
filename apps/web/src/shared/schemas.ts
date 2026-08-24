@@ -120,6 +120,10 @@ export const ProductivityResponseV1 = z.object({
     daily: z.array(z.object({ day: z.string(), count: z.number() })),
     teams: z.array(z.object({ id: z.string(), team: z.string(), count: z.number() })),
   }),
+  correlations: z.object({
+    tokensCommits: z.array(z.object({ day: z.string(), tokens: z.number(), count: z.number() })),
+    tokensTasks: z.array(z.object({ day: z.string(), tokens: z.number(), count: z.number() })),
+  }),
   ratios: z.object({ tokensPerCommit: z.number().nullable(), tokensPerTask: z.number().nullable() }),
   filters: z.object({ repo: z.string().nullable(), team: z.string().nullable() }),
   sources: z.array(z.object({
