@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { compress } from "hono/compress";
 import { randomUUID } from "node:crypto";
 import { db, json } from "./server/db";
 import { security, requireAdmin } from "./server/auth";
@@ -12,7 +13,9 @@ import { UsageRecordV1 } from "./shared/schemas";
 import { analyzePrompt } from "./server/prompt-analysis";
 import { productivityActivity, productivityResponse, startProductivitySync, syncProductivitySources } from "./server/productivity";
 
-const app = new Hono(); app.use("*", security);
+const app = new Hono();
+app.use(compress());
+app.use("*", security);
 app.use("/limits", requireAdmin);
 app.use("/limits/*", requireAdmin);
 export function collectorTimeseries(days: number) {

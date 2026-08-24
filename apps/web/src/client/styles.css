@@ -1,7 +1,7 @@
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("/fonts/JetBrainsMonoNerdFont-Regular.ttf") format("truetype");
-  font-display: swap;
+  src: url("/fonts/JetBrainsMonoNerdFont-Regular.woff2") format("woff2");
+  font-display: fallback;
   font-weight: 400 700;
 }
 :root {
@@ -1466,6 +1466,48 @@ select {
   border-radius: 3px;
   font: 12px "IBM Plex Mono";
 }
+.routing-receipt {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 16px 28px;
+  margin-top: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.routing-leg {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.routing-leg span {
+  color: var(--dim);
+  font: 9px "IBM Plex Mono";
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.routing-leg strong {
+  overflow: hidden;
+  color: var(--ink);
+  font: 500 13px "IBM Plex Mono";
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routing-copy {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+.routing-copy .button {
+  min-width: 142px;
+}
+.copy-feedback {
+  min-height: 14px;
+  color: var(--muted);
+  font: 9px "IBM Plex Mono";
+}
 .text-button {
   padding: 0;
   color: var(--muted);
@@ -1841,6 +1883,22 @@ select {
   }
   .limits section {
     padding: 18px 0 22px;
+  }
+  .limits-view .verdict {
+    min-height: 383px;
+  }
+  .routing-receipt {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .routing-copy {
+    grid-column: 1 / -1;
+    justify-items: stretch;
+  }
+  .routing-copy .button {
+    width: 100%;
+  }
+  .copy-feedback {
+    text-align: center;
   }
   .reset-timeline li {
     grid-template-columns: 1fr auto;

@@ -1163,7 +1163,8 @@ function LimitsBoardView() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [reload, setReload] = useState(0),
-    [nowMs, setNowMs] = useState(() => Date.now());
+    [nowMs, setNowMs] = useState(() => Date.now()),
+    [copyState, setCopyState] = useState<"idle" | "copied" | "selected">("idle");
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -1191,7 +1192,10 @@ function LimitsBoardView() {
     api<{ verdictLine: string; generatedAt: string; rows: AdviceRow[] }>(
       `/limits/api/advice${params.size ? `?${params}` : ""}`,
     )
-      .then(setAdvice)
+      .then((next) => {
+        setAdvice(next);
+        setCopyState("idle");
+      })
       .catch(() => setAdvice(null));
   }, [task, custom, reload]);
   const platforms = useMemo(() => {
@@ -1208,6 +1212,23 @@ function LimitsBoardView() {
     return at - bt;
   }), [board]);
   const bindingPlatform = platforms.find((platform) => platform.binding) ?? platforms[0];
+  const copyRoutingBrief = async () => {
+    if (!advice) return;
+    try {
+      await navigator.clipboard.writeText(advice.verdictLine);
+      setCopyState("copied");
+    } catch {
+      const verdict = document.querySelector(".limits-view .verdict-line");
+      const selection = window.getSelection();
+      if (verdict && selection) {
+        const range = document.createRange();
+        range.selectNodeContents(verdict);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      setCopyState("selected");
+    }
+  };
   const tableSummary = platforms
     .map(
       (p) =>
@@ -1286,6 +1307,24 @@ function LimitsBoardView() {
               <label>Cache read <input inputMode="numeric" value={custom.cacheRead} placeholder="tokens" onChange={(e) => { setTask(""); setCustom({ ...custom, cacheRead: e.target.value.replace(/[^0-9]/g, "") }); }} /></label>
               {Object.values(custom).some(Boolean) && <button className="text-button" onClick={() => setCustom({ input: "", output: "", cacheRead: "" })}>Clear custom</button>}
             </div>
+            <div className="routing-receipt" aria-label="Current routing brief">
+              <div className="routing-leg">
+                <span>Next route</span>
+                <strong>{advice?.rows[0]?.providerName ?? "Reading evidence"}</strong>
+              </div>
+              <div className="routing-leg">
+                <span>Recovery route</span>
+                <strong>{advice ? (advice.fallbackProviderName ?? "None reported") : "Reading evidence"}</strong>
+              </div>
+              <div className="routing-copy">
+                <Button onClick={() => void copyRoutingBrief()} disabled={!advice}>
+                  {copyState === "copied" ? "Routing brief copied" : "Copy routing brief"}
+                </Button>
+                <span className="copy-feedback" role="status" aria-live="polite">
+                  {copyState === "selected" ? "Clipboard blocked · verdict selected" : ""}
+                </span>
+              </div>
+            </div>
             <p className="capacity-brief">
               {bindingPlatform?.binding ? <><strong>{bindingPlatform.providerName}</strong> binds first at {Math.round(bindingPlatform.binding.used * 100)}% used ({Math.round((1 - bindingPlatform.binding.used) * 100)}% headroom){bindingPlatform.binding.resetsAt ? `; resets ${new Date(bindingPlatform.binding.resetsAt).toLocaleString()}` : "; reset unknown"}.</> : "No binding limit is confirmed from current records."}
               {advice?.fallbackProviderName && <> Fallback: <strong>{advice.fallbackProviderName}</strong>{advice.recommendationResetsAt ? ` until ${new Date(advice.recommendationResetsAt).toLocaleString()}` : " while the primary recovers"}.</>}
@@ -1320,13 +1359,14 @@ function LimitsBoardView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {!platforms.length && (
-                    <tr>
+                  {!platforms.length && Array.from({ length: 6 }, (_, index) => (
+                    <tr key={`platform-skeleton-${index}`} aria-hidden={index ? true : undefined}>
                       <td colSpan={6}>
-                        <Sk w={180} />
+                        {!index && <span className="sr-only">Loading subscriptions</span>}
+                        <Sk w={index % 2 ? 136 : 180} />
                       </td>
                     </tr>
-                  )}
+                  ))}
                   {platforms.map((p) => (
                     <tr key={p.providerId}>
                       <th scope="row" className="provider">
