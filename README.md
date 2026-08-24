@@ -48,7 +48,7 @@ bun run deploy:local   # builds plugins into ~/.config/omarchy/plugins/
 
 ## Remote access
 
-`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, a self-hosted Access application, and an allow policy for one email — plus one path-scoped admin Access application (`/limits`, covering the portal page and its `/limits/api/*` endpoints) that gates the limits portal. The tunnel hostname (`API_HOSTNAME`) serves the Worker's service-token proxy; the browser-facing hostname (`DASHBOARD_HOSTNAME`) is where people browse, and the Worker redirects `/limits*` to the portal on the tunnel host. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
+`apps/web/deploy/executable_provision-cloudflare.sh` provisions a remotely managed Cloudflare Tunnel, DNS route, OTP identity provider, and a single self-hosted Access application (one allow policy for your email plus the Worker service policy) covering the tunnel hostname — page, assets, and API share one session, and the limits portal additionally enforces an admin audience at the origin. The tunnel hostname (`API_HOSTNAME`) serves the Worker's service-token proxy; the browser-facing hostname (`DASHBOARD_HOSTNAME`) is where people browse, and the Worker redirects `/limits*` to the portal on the tunnel host. See [apps/web/README.md](apps/web/README.md) for the required environment variables.
 
 Loopback traffic stays unauthenticated; remote requests require a valid Cloudflare Access JWT scoped to your team, audience, and allow-listed email.
 

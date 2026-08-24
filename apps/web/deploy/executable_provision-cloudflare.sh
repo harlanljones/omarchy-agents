@@ -83,24 +83,13 @@ else
   else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" --data "$svc_policy_body" >/dev/null; fi
 fi
 
-legacy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg domain "$host/api/limits" '.result[] | select(.domain==$domain) | .id' | head -1)
-if [[ -n $legacy_id ]]; then
-  request -X DELETE "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$legacy_id" >/dev/null
-  printf 'Removed the legacy %s/api/limits Access app; the portal now uses one app for page and API.\n' "$host"
-fi
-
-admin_domain="$host/limits"
-admin_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg domain "$admin_domain" '.result[] | select(.domain==$domain) | .id' | head -1)
-admin_body=$(jq -nc --arg domain "$admin_domain" --arg idp "$otp_id" '{name:"Omarchy Agents Admin",domain:$admin_domain,type:"self_hosted",session_duration:"24h",auto_redirect_to_identity:true,allowed_idps:[$idp]}')
-if [[ -n $admin_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id" --data "$admin_body" >/dev/null
-else admin_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" --data "$admin_body" | jq -er '.result.id'); fi
-
-admin_policy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies" | jq -r '.result[] | select(.name=="Portal user") | .id' | head -1)
-admin_policy_body=$(jq -nc --arg email "$ACCESS_EMAIL" '{name:"Portal user",decision:"allow",precedence:1,include:[{email:{email:$email}}],session_duration:"24h"}')
-if [[ -n $admin_policy_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies/$admin_policy_id" --data "$admin_policy_body" >/dev/null
-else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id/policies" --data "$admin_policy_body" >/dev/null; fi
-
-admin_aud=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$admin_id" | jq -er '.result.aud')
+for legacy_domain in "$host/limits" "$host/api/limits"; do
+  legacy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg domain "$legacy_domain" '.result[] | select(.domain==$domain) | .id' | head -1)
+  if [[ -n $legacy_id ]]; then
+    request -X DELETE "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$legacy_id" >/dev/null
+    printf 'Removed legacy path-scoped Access app %s; one application now covers the whole tunnel host.\n' "$legacy_domain"
+  fi
+done
 
 token=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$tunnel_id/token" | jq -er '.result')
 aud=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id" | jq -er '.result.aud')
@@ -113,7 +102,7 @@ if grep -q '^CLOUDFLARE_ACCESS_AUD=' "$config_dir/dashboard.env"; then
 else
   printf 'CLOUDFLARE_ACCESS_AUD=%s\n' "$aud" >>"$config_dir/dashboard.env"
 fi
-admin_aud_list="$admin_aud"
+admin_aud_list="$aud"
 if grep -q '^CLOUDFLARE_ACCESS_ADMIN_AUD=' "$config_dir/dashboard.env"; then
   sed -i "s|^CLOUDFLARE_ACCESS_ADMIN_AUD=.*|CLOUDFLARE_ACCESS_ADMIN_AUD=$admin_aud_list|" "$config_dir/dashboard.env"
 else
@@ -129,7 +118,7 @@ upsert_env() {
 upsert_env API_HOSTNAME "$host"
 upsert_env CLOUDFLARE_ACCESS_API_AUD "$aud"
 upsert_env ACCESS_CLIENT_ID "$svc_client_id"
-printf 'Provisioned %s via tunnel %s with admin apps and the worker service policy.\n' "$host" "$tunnel_id"
+printf 'Provisioned %s via tunnel %s with one Access application covering the host, the portal audience, and the worker service policy.\n' "$host" "$tunnel_id"
 printf 'Next:\n'
 printf '  1. cd apps/web && bunx wrangler secret put ACCESS_CLIENT_ID      # %s\n' "$svc_client_id"
 printf '  2. bunx wrangler secret put ACCESS_CLIENT_SECRET                 # the secret saved above\n'
