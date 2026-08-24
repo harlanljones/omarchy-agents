@@ -48,10 +48,10 @@ function normalizeWindows(record: UsageRecord): LimitWindowView[] {
     .filter(w => Number.isFinite(w.used));
 }
 
-function deriveStatus(record: UsageRecord): PlatformStatus {
+function deriveStatus(record: UsageRecord, now: number): PlatformStatus {
   if (record.ready === false) return "auth-needed";
   const updated = record.updatedAt ? new Date(record.updatedAt).valueOf() : NaN;
-  if (!Number.isNaN(updated) && Date.now() - updated > 26 * 3600_000) return "stale";
+  if (!Number.isNaN(updated) && now - updated > 26 * 3600_000) return "stale";
   const hasSignals = (record.limits?.length ?? 0) > 0 || !!record.balance || Number(record.todayTotalTokens ?? 0) > 0 || (record.recentDays ?? []).some(d => d.messageCount > 0);
   return hasSignals ? "ready" : "no-data";
 }
@@ -66,7 +66,7 @@ export function buildPlatformLimits(record: UsageRecord, now = Date.now()): Plat
     providerId: record.id,
     providerName: record.name ?? record.id,
     tier: String(record.tierLabel ?? ""),
-    status: deriveStatus(record),
+    status: deriveStatus(record, now),
     statusText: String(record.usageStatusText ?? record.authHelpText ?? ""),
     windows,
     binding,
