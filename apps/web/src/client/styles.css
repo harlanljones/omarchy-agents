@@ -251,9 +251,21 @@ main {
   gap: 16px;
   align-items: center;
 }
-.rail-toggle,
-.rail-close {
+.rail-toggle {
   display: none;
+}
+.rail-close,
+.rail-toggle-collapsed {
+  display: block;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+.rail-close {
+  margin: 0 0 10px auto;
 }
 .rail-toggle-global {
   float: right;
@@ -627,6 +639,9 @@ select {
   padding: 26px 24px;
   z-index: 30;
 }
+.rail.collapsed {
+  display: none;
+}
 .analyst > header {
   display: flex;
   align-items: flex-start;
@@ -913,7 +928,9 @@ select {
   .shell.without-rail {
     grid-template-columns: 76px 1fr;
   }
-  .rail {
+  .rail,
+  .rail.collapsed {
+    display: block;
     position: fixed;
     right: 0;
     transform: translateX(102%);
@@ -936,9 +953,7 @@ select {
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 7px 9px;
-  }
-  .rail-close {
-    margin: 0 0 10px auto;
+    cursor: pointer;
   }
   .scrim.show {
     display: block;

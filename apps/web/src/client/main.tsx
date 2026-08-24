@@ -2033,8 +2033,10 @@ function Settings() {
 function App() {
   const [nav, setNav] = useState<Nav>(() => navFromPath()),
     [rail, setRail] = useState(false),
+    [railCollapsed, setRailCollapsed] = useState(false),
     [compactLayout, setCompactLayout] = useState(false);
   const railRef = useRef<HTMLElement>(null);
+  const railToggleRef = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const labels: { id: Nav; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -2062,16 +2064,23 @@ function App() {
   };
   const openRail = () => {
     returnFocus.current = document.activeElement as HTMLElement;
-    setRail(true);
+    if (compactLayout) setRail(true);
+    else setRailCollapsed(false);
     requestAnimationFrame(() =>
       railRef.current?.querySelector<HTMLElement>("button,textarea")?.focus(),
     );
   };
   const closeRail = () => {
-    setRail(false);
-    requestAnimationFrame(() => returnFocus.current?.focus());
+    if (compactLayout) {
+      setRail(false);
+      requestAnimationFrame(() => returnFocus.current?.focus());
+    } else {
+      setRailCollapsed(true);
+      requestAnimationFrame(() => railToggleRef.current?.focus());
+    }
   };
   const trapRail = (event: React.KeyboardEvent) => {
+    if (!compactLayout) return;
     if (event.key === "Escape") {
       event.preventDefault();
       closeRail();
@@ -2094,8 +2103,11 @@ function App() {
       first.focus();
     }
   };
+  const railHidden = compactLayout ? !rail : railCollapsed;
   return (
-    <div className={`shell ${nav === "analyst" ? "without-rail" : ""} ${nav === "limits" ? "limits-shell" : ""}`}>
+    <div
+      className={`shell ${nav === "analyst" || railCollapsed ? "without-rail" : ""} ${nav === "limits" ? "limits-shell" : ""}`}
+    >
       <a href="#main" className="skip">
         Skip to content
       </a>
@@ -2136,17 +2148,23 @@ function App() {
           Omarchy console. STORY: compare, inspect, ask, decide. FIRST VIEWPORT:
           standings and advisory rail. FORM: ruled control room.
         </div>
-        {nav !== "overview" && nav !== "analyst" && (
+        {nav !== "analyst" && (nav !== "overview" || railCollapsed) && (
           <button
-            className="rail-toggle rail-toggle-global"
+            ref={railToggleRef}
+            className={`rail-toggle rail-toggle-global ${railCollapsed ? "rail-toggle-collapsed" : ""}`}
             onClick={openRail}
-            aria-expanded={rail}
+            aria-expanded={compactLayout ? rail : !railCollapsed}
             aria-controls="analyst-rail"
           >
             Open analyst
           </button>
         )}
-        {nav === "overview" && <Overview openRail={openRail} railOpen={rail} />}{" "}
+        {nav === "overview" && (
+          <Overview
+            openRail={openRail}
+            railOpen={compactLayout ? rail : !railCollapsed}
+          />
+        )}{" "}
         {nav === "logs" && <Logs />}
         {nav === "analyst" && <Analyst />}
         {nav === "settings" && <Settings />}
@@ -2156,17 +2174,17 @@ function App() {
         <aside
           id="analyst-rail"
           ref={railRef}
-          className={`rail ${rail ? "open" : ""}`}
-          inert={compactLayout && !rail ? "" : undefined}
-          aria-hidden={compactLayout && !rail ? true : undefined}
+          className={`rail ${rail ? "open" : ""} ${railCollapsed ? "collapsed" : ""}`}
+          inert={railHidden ? "" : undefined}
+          aria-hidden={railHidden ? true : undefined}
           onKeyDown={trapRail}
         >
           <button
             className="rail-close"
             onClick={closeRail}
-            aria-label="Close analyst"
+            aria-label={compactLayout ? "Close analyst" : "Collapse analyst"}
           >
-            Close
+            {compactLayout ? "Close" : "Collapse analyst"}
           </button>
           <Analyst compact />
         </aside>
