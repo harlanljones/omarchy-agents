@@ -78,6 +78,11 @@ describe("cost estimation", () => {
     });
     expect(model).toBe("large");
     expect(dominantModel({ todayTokensByModel: { solo: 42 } })).toBe("solo");
+    expect(dominantModel({ todayTokensByModel: { a: 1, larger: 9 } })).toBe("larger");
+    // Cline's collector emits per-model token buckets in todayTokensByModel,
+    // not flat totals; the dominant model must still be the heaviest bucket.
+    expect(dominantModel({ todayTokensByModel: { small: { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 1 }, big: { inputTokens: 5_000_000, outputTokens: 0, cacheReadInputTokens: 0 } } })).toBe("big");
+    expect(dominantModel({ todayTokensByModel: { a: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0 }, b: { inputTokens: 3, outputTokens: 0, cacheReadInputTokens: 0 } } })).toBe("b");
     expect(dominantModel({})).toBeNull();
   });
 });

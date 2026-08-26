@@ -5,6 +5,8 @@
 User-agent: *
 Allow: /
 
+Sitemap: https://agents.harlanljones.com/sitemap.xml
+
 # AI/LLM specific guidance
 User-agent: GPTBot
 Allow: /

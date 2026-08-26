@@ -71,7 +71,7 @@ Panel {
           if (Model.tokenBucketTotal(usage2[mid]) > 0) return true
         var tbm = rec.todayTokensByModel || {}
         for (var mid2 in tbm)
-          if (Model.numberValue(tbm[mid2]) > 0) return true
+          if (Model.todayTokenTotal(tbm[mid2]) > 0) return true
       }
       return false
     }

@@ -20,7 +20,7 @@ export const UsageRecordV1 = z.object({
   todayPrompts: z.coerce.number().optional(), todaySessions: z.coerce.number().optional(),
   totalPrompts: z.coerce.number().optional(), totalSessions: z.coerce.number().optional(), activeDays: z.coerce.number().optional(),
   recentDays: z.array(z.object({ date: z.string(), messageCount: z.coerce.number().default(0) }).passthrough()).optional(),
-  modelUsage: z.record(z.string(), tokenBucket).optional(), todayTokensByModel: z.record(z.string(), z.coerce.number()).optional(),
+  modelUsage: z.record(z.string(), tokenBucket).optional(), todayTokensByModel: z.record(z.string(), z.union([z.coerce.number(), tokenBucket])).optional(),
   hasPromptStats: z.boolean().optional(), updatedAt: z.string().optional(),
   limits: z.array(LimitWindowRecord).optional(), balance: BalanceRecord.optional(),
   tierLabel: z.string().optional(), ready: z.boolean().optional(), scope: z.string().optional(),

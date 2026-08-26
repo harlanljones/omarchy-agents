@@ -73,14 +73,18 @@ export function ratesForModel(model: string): { rates: Rates | null; source: "bu
   return { rates: { inputPerMtok: entry.inputPerMtok, outputPerMtok: entry.outputPerMtok, cacheReadPerMtok: entry.cacheReadPerMtok, cacheWritePerMtok: entry.cacheWritePerMtok }, source: "built-in", match, asOf: entry.asOf };
 }
 
-export function dominantModel(record: { modelUsage?: Record<string, any>; todayTokensByModel?: Record<string, number> }) {
+export function dominantModel(record: { modelUsage?: Record<string, any>; todayTokensByModel?: Record<string, any> }) {
+  const bucketTotal = (b: any) => Number(b?.inputTokens ?? 0) + Number(b?.outputTokens ?? 0) + Number(b?.cacheReadInputTokens ?? 0) + Number(b?.cacheCreationInputTokens ?? 0);
   const buckets = Object.entries(record.modelUsage ?? {});
   if (buckets.length) {
-    const total = (b: any) => Number(b?.inputTokens ?? 0) + Number(b?.outputTokens ?? 0) + Number(b?.cacheReadInputTokens ?? 0) + Number(b?.cacheCreationInputTokens ?? 0);
-    return buckets.sort((a, b) => total(b[1]) - total(a[1]))[0][0];
+    return buckets.sort((a, b) => bucketTotal(b[1]) - bucketTotal(a[1]))[0][0];
   }
-  const todays = Object.entries(record.todayTokensByModel ?? {});
-  if (todays.length) return todays.sort((a, b) => Number(b[1]) - Number(a[1]))[0][0];
+  // todayTokensByModel may carry either a flat per-model token total or a full
+  // token bucket object (Cline's collector emits the latter). Normalize both so
+  // the dominant model is always the heaviest today.
+  const todayTotal = (v: any) => v && typeof v === "object" ? bucketTotal(v) : Number(v) || 0;
+  const todays = Object.entries(record.todayTokensByModel ?? {}).filter(([, v]) => todayTotal(v) > 0);
+  if (todays.length) return todays.sort((a, b) => todayTotal(b[1]) - todayTotal(a[1]))[0][0];
   return null;
 }
 

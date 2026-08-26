@@ -50,6 +50,15 @@ function tokenBucketTotal(bucket) {
     + numberValue(bucket.cacheCreationInputTokens)
 }
 
+// A provider's todayTokensByModel entry can be either a flat per-model token
+// total (most collectors) or a full token bucket object (Cline's collector).
+// Normalize both so the "today" model view and hasUsage stay truthful for any
+// writer that lands in the usage directory.
+function todayTokenTotal(value) {
+  if (value && typeof value === "object") return tokenBucketTotal(value)
+  return numberValue(value)
+}
+
 function weekTokens(record) {
   var days = record && record.recentDays ? record.recentDays : []
   var total = 0
@@ -180,7 +189,7 @@ function rankByModel(records, period, settings) {
     // Today: read per-model today totals from todayTokensByModel
     var todayByModel = record.todayTokensByModel || {}
     for (var mid in todayByModel) {
-      var todayVal = numberValue(todayByModel[mid])
+      var todayVal = todayTokenTotal(todayByModel[mid])
       if (todayVal <= 0) continue
       if (!models[mid]) models[mid] = { providerId: id, providerName: providerName, tokens: 0, todayTokens: 0 }
       models[mid].todayTokens += todayVal
