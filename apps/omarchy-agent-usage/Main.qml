@@ -721,12 +721,41 @@ Item {
   function modelWordCase(word) {
     if (word === "gpt") return "GPT"
     if (word === "deepseek") return "DeepSeek"
+    if (word === "glm") return "GLM"
     return word.charAt(0).toUpperCase() + word.slice(1)
   }
 
+  // OpenCode routes through many underlying providers (the `providerID`
+  // values in its session model field). These are the known ones; anything
+  // else falls back to a clean title-case so a newly-added provider still
+  // renders sanely instead of being silently mislabeled.
+  function friendlyProviderName(providerId) {
+    var known = {
+      "opencode": "OpenCode",
+      "opencode-go": "OpenCode Go",
+      "openrouter": "OpenRouter",
+      "venice": "Venice",
+      "aihubmix": "AIHubMix",
+      "bai": "Bai",
+      "bai-glm": "Bai GLM",
+      "bai-gpt": "Bai GPT",
+      "cloudflare-workers-ai": "Cloudflare Workers AI",
+      "freetoken": "FreeToken",
+      "gmicloud": "GMCloud",
+      "gorouter": "GoRouter",
+      "nous": "Nous"
+    }
+    if (known[providerId]) return known[providerId]
+    return providerId.split(/[-\s.]+/).map(function(w) {
+      if (/^(gpt|ai|glm|api|sdk|ml)$/i.test(w)) return w.toUpperCase()
+      return w.charAt(0).toUpperCase() + w.slice(1)
+    }).join(" ")
+  }
+
   // Model ids arrive hyphenated with the version split across segments
-  // (`claude-opus-4-8`, `gpt-5.6-sol`). Rejoin the numeric run into one
-  // version and title-case the words around it.
+  // (`claude-opus-4-8`, `gpt-5.6-sol`). When an OpenCode sub-provider is
+  // present it is prefixed as `provider/model` (`opencode-go/hy3`). Rejoin
+  // the numeric run into one version and title-case the words around it.
   function friendlyModelName(id) {
     if (!id) return "Unknown"
     var raw = String(id)
@@ -751,10 +780,7 @@ Item {
     }
     if (version.length > 0) words.push(version.join("."))
     var model = words.length > 0 ? words.join(" ") : "Unknown"
-    if (provider === "opencode") provider = "Zen"
-    else if (provider === "opencode-go") provider = "Go"
-    else if (provider === "openrouter") provider = "OpenRouter"
-    else if (provider !== "") provider = provider.replace(/-/g, " ").replace(/\b\w/g, function(letter) { return letter.toUpperCase() })
-    return provider === "" ? model : provider + " / " + model
+    if (provider === "") return model
+    return friendlyProviderName(provider) + " / " + model
   }
 }

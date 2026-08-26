@@ -215,7 +215,10 @@ function rankByModel(records, period, settings) {
       providerId: mid3,
       providerName: friendlyModelName(mid3),
       modelProviderId: m.providerId,
-      modelProviderName: m.providerName,
+      modelProviderName: (function() {
+        var split = splitModelKey(mid3)
+        return split.provider ? friendlyProviderName(split.provider) : m.providerName
+      })(),
       tokens: m.tokens,
       todayTokens: m.todayTokens,
       hasPromptStats: false
@@ -357,12 +360,50 @@ function formatShare(share) {
 function modelWordCase(word) {
   if (word === "gpt") return "GPT"
   if (word === "deepseek") return "DeepSeek"
+  if (word === "glm") return "GLM"
   return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
+// OpenCode routes through many underlying providers (the `providerID`
+// values in its session model field). These are the known ones; anything
+// else falls back to a clean title-case so a newly-added provider still
+// renders sanely instead of being silently mislabeled.
+function friendlyProviderName(providerId) {
+  var known = {
+    "opencode": "OpenCode",
+    "opencode-go": "OpenCode Go",
+    "openrouter": "OpenRouter",
+    "venice": "Venice",
+    "aihubmix": "AIHubMix",
+    "bai": "Bai",
+    "bai-glm": "Bai GLM",
+    "bai-gpt": "Bai GPT",
+    "cloudflare-workers-ai": "Cloudflare Workers AI",
+    "freetoken": "FreeToken",
+    "gmicloud": "GMCloud",
+    "gorouter": "GoRouter",
+    "nous": "Nous"
+  }
+  if (known[providerId]) return known[providerId]
+  return providerId.split(/[-\s.]+/).map(function(w) {
+    if (/^(gpt|ai|glm|api|sdk|ml)$/i.test(w)) return w.toUpperCase()
+    return w.charAt(0).toUpperCase() + w.slice(1)
+  }).join(" ")
+}
+
+// Split an OpenCode modelUsage key (`providerID/modelID`) into its parts.
+// Keys without a slash are left as a bare model id.
+function splitModelKey(id) {
+  var raw = String(id || "")
+  var slash = raw.indexOf("/")
+  if (slash < 0) return { provider: "", model: raw }
+  return { provider: raw.substring(0, slash), model: raw.substring(slash + 1) }
 }
 
 function friendlyModelName(id) {
   if (!id) return "Unknown"
-  var name = String(id).replace(/^claude-/, "").replace(/-\d{8}$/, "")
+  var split = splitModelKey(id)
+  var name = split.model.replace(/^claude-/, "").replace(/-\d{8}$/, "")
   var parts = name.split("-")
   var words = []
   var version = []
@@ -380,7 +421,9 @@ function friendlyModelName(id) {
     words.push(modelWordCase(part))
   }
   if (version.length > 0) words.push(version.join("."))
-  return words.length > 0 ? words.join(" ") : "Unknown"
+  var model = words.length > 0 ? words.join(" ") : "Unknown"
+  if (split.provider === "") return model
+  return friendlyProviderName(split.provider) + " / " + model
 }
 
 function heroMeta(board, period, viewMode) {

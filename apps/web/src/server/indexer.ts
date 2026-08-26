@@ -167,6 +167,21 @@ function refreshUsage() {
   } catch (error) { db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(usageDir, "recommendation", String(error), new Date().toISOString()); }
 }
 
+// OpenCode stores the session model as a JSON object
+// (`{"id":"hy3","providerID":"opencode-go","variant":"high"}`). Normalize it
+// to the bare model id and capture the underlying provider so the model
+// breakdown is correct and the sub-provider is tracked.
+function openCodeModelInfo(model: unknown): { id: string | null; providerId: string | null } {
+  if (!model) return { id: null, providerId: null }
+  let obj: any = null
+  if (typeof model === "string") { try { obj = JSON.parse(model) } catch { return { id: null, providerId: null } } }
+  else if (model && typeof model === "object") obj = model
+  if (!obj || typeof obj !== "object") return { id: null, providerId: null }
+  const id = typeof obj.id === "string" && obj.id.length ? obj.id : null
+  const providerId = typeof obj.providerID === "string" && obj.providerID.length ? obj.providerID : null
+  return { id, providerId }
+}
+
 function indexOpenCode() {
   const path = `${home}/.local/share/opencode/opencode.db`;
   if (!existsSync(path)) return;
@@ -194,7 +209,8 @@ function indexOpenCode() {
         events.push(LogEvent.parse({ id: part.id, sessionId: raw.id, ordinal: events.length, kind, timestamp: epochIso(part.time_created, new Date().toISOString()), text: redact(text), toolName: data.tool ?? null, sourceLocator: `${path}:part/${part.id}`, metadata: { partType: type } }));
       }
       const fallback = new Date().toISOString();
-      persist(NormalizedSession.parse({ id: raw.id, provider: "opencode", model: raw.model ?? null, project: raw.directory ?? null, title: raw.title ?? null, startedAt: epochIso(raw.time_created, fallback), endedAt: epochIso(raw.time_updated, fallback), sourcePath: path, sourceKey: `opencode:${raw.id}`, tokenInput: tokenNumber(raw.tokens_input), tokenOutput: tokenNumber(raw.tokens_output), cacheRead: tokenNumber(raw.tokens_cache_read), cacheWrite: tokenNumber(raw.tokens_cache_write), errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "opencode-sqlite" } }), events);
+      const modelInfo = openCodeModelInfo(raw.model)
+      persist(NormalizedSession.parse({ id: raw.id, provider: "opencode", model: modelInfo.id, project: raw.directory ?? null, title: raw.title ?? null, startedAt: epochIso(raw.time_created, fallback), endedAt: epochIso(raw.time_updated, fallback), sourcePath: path, sourceKey: `opencode:${raw.id}`, tokenInput: tokenNumber(raw.tokens_input), tokenOutput: tokenNumber(raw.tokens_output), cacheRead: tokenNumber(raw.tokens_cache_read), cacheWrite: tokenNumber(raw.tokens_cache_write), errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "opencode-sqlite", opencodeProviderId: modelInfo.providerId } }), events);
       progress.indexed++;
     }
     db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(path, "opencode", 0, maxUpdated, new Date().toISOString(), OPENCODE_CURSOR_VERSION);

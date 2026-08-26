@@ -166,6 +166,17 @@ assertEqual(M.formatShare(0.004), "<1%", "tiny shares do not round to zero")
 assertEqual(M.friendlyModelName("deepseek-v4-pro"), "DeepSeek V4 Pro", "model names title-case")
 assertEqual(M.friendlyModelName("gpt-5.3-codex"), "GPT 5.3 Codex", "gpt stays uppercase")
 
+// OpenCode routes through many underlying providers; the modelUsage key is
+// `providerID/modelID` and both halves must render correctly.
+assertEqual(M.splitModelKey("opencode-go/hy3").provider, "opencode-go", "split isolates the opencode sub-provider")
+assertEqual(M.splitModelKey("opencode-go/hy3").model, "hy3", "split isolates the opencode model id")
+assertEqual(M.friendlyModelName("opencode-go/hy3"), "OpenCode Go / Hy3", "opencode sub-provider is named")
+assertEqual(M.friendlyModelName("opencode/x-preview-f-free"), "OpenCode / X Preview F Free", "opencode default provider is named")
+assertEqual(M.friendlyModelName("bai-glm/glm-5.2"), "Bai GLM / GLM 5.2", "unknown-but-mapped provider is named")
+assertEqual(M.friendlyModelName("some-future-provider/model-x"), "Some Future Provider / Model X", "unmapped provider falls back to title-case")
+assertEqual(M.friendlyProviderName("cloudflare-workers-ai"), "Cloudflare Workers AI", "hyphenated acronyms title-case")
+
+
 const models = M.modelRows(records[1], 4)
 assertEqual(models.length, 1, "codex has one model row")
 assertEqual(models[0].total, 11_265_366, "model row totals the bucket")
