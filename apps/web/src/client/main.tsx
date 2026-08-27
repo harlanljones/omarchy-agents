@@ -6,7 +6,9 @@ import type { AdviceRow, AdviceVerdict, AlertsResponse, IncidentsResponse, Limit
 import "./styles.css";
 import { colors, fmt } from "./theme";
 
-const HistoryChart = lazy(() => import("./chart"));
+const HistoryChart = lazy(() =>
+  import("./chart").then((m) => ({ default: m.HistoryChart })),
+);
 
 type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
 const navPaths: Record<Nav, string> = {
