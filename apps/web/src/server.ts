@@ -4,7 +4,7 @@ import type { Context, Next } from "hono";
 import { compress } from "hono/compress";
 import { randomUUID } from "node:crypto";
 import { db, json } from "./server/db";
-import { security, requireAdmin, localHosts } from "./server/auth";
+import { security, requireAdmin, localHosts, identityVerified } from "./server/auth";
 import { rank } from "./server/ranking";
 import { runIndex, indexProgress, startWatching } from "./server/indexer";
 import { isIndexed } from "./server/providers";
@@ -156,21 +156,28 @@ app.patch("/api/suggestions/:id", async c => { const body = await c.req.json(); 
 // Local-first: loopback still renders the SPA and assets for development.
 const serveDist = serveStatic({ root: "./dist" });
 const servePublic = serveStatic({ root: "./public" });
+// Portal assets and the SPA shell are also served to remote browsers whose
+// Access identity requireAdmin/security verified (the portal lives on the
+// API hostname, which is natively Access-gated at the edge).
+const serveGated = async (c: Context, next: Next, handler: (c: Context, next: Next) => Response | Promise<Response | void>) => {
+  if (localHosts.has((c.req.header("host") ?? "").split(":")[0].toLowerCase()) || identityVerified(c)) return await handler(c, next);
+  return next();
+};
 const localOnly = async (c: Context, next: Next, handler: (c: Context, next: Next) => Response | Promise<Response | void>) => {
   const host = (c.req.header("host") ?? "").split(":")[0].toLowerCase();
   if (!localHosts.has(host)) return await next();
   return await handler(c, next);
 };
-app.use("/assets/*", (c, n) => localOnly(c, n, serveDist));
-app.use("/provider-assets/*", (c, n) => localOnly(c, n, serveDist));
-app.use("/fonts/*", (c, n) => localOnly(c, n, serveDist));
+app.use("/assets/*", (c, n) => serveGated(c, n, serveDist));
+app.use("/provider-assets/*", (c, n) => serveGated(c, n, serveDist));
+app.use("/fonts/*", (c, n) => serveGated(c, n, serveDist));
 // Keep source-owned public files available before the first build completes.
 // This also makes the Bun test server deterministic when Turborepo runs the
 // web test and build tasks in parallel.
 app.use("*", (c, n) => localOnly(c, n, servePublic));
 app.get("*", async c => {
   const host = (c.req.header("host") ?? "").split(":")[0].toLowerCase();
-  if (!localHosts.has(host)) return c.json({ error: "Not found" }, 404);
+  if (!localHosts.has(host) && !identityVerified(c)) return c.json({ error: "Not found" }, 404);
   const file = Bun.file("./dist/index.html");
   return file.size ? new Response(file, { headers: { "content-type": "text/html; charset=utf-8" } }) : c.text("Build the dashboard with `bun run build`.", 503);
 });

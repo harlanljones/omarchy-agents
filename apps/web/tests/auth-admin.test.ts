@@ -153,6 +153,30 @@ describe("productivity endpoint boundary", () => {
   });
 });
 
+describe("portal on the API origin", () => {
+  beforeAll(() => {
+    setEnv("API_HOSTNAME", "api.example.com");
+    setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
+    setEnv("ACCESS_CLIENT_ID", "svc.client");
+  });
+  // The limits portal is served on the API hostname (natively Access-gated at
+  // the edge); a human whose edge-injected JWT verifies may load the SPA shell.
+  test("serves the SPA shell to an admin-verified human", async () => {
+    const token = await signToken("aud-admin-a");
+    const response = await app.request("https://api.example.com/limits", { headers: { host: "api.example.com", "cf-access-jwt-assertion": token } });
+    expect(response.status).toBe(200);
+  });
+
+  test("remote non-admin SPA paths stay closed on the API origin", async () => {
+    const human = await signToken("aud-admin-a");
+    const humanResponse = await app.request("https://api.example.com/overview", { headers: { host: "api.example.com", "cf-access-jwt-assertion": human } });
+    expect(humanResponse.status).toBe(401);
+    const service = await signToken("aud-api", "admin@example.com", { common_name: "svc.client" });
+    const serviceResponse = await app.request("https://api.example.com/overview", { headers: { host: "api.example.com", "cf-access-jwt-assertion": service } });
+    expect(serviceResponse.status).toBe(404);
+  });
+});
+
 describe("existing boundary preserved", () => {
   test("loopback stays open for non-admin routes", async () =>
     expect((await get("/api/overview", "127.0.0.1")).status).toBe(200));

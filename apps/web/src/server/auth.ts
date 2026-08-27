@@ -41,6 +41,12 @@ export const isAdminPath = (path: string) =>
 export const isAdminAssetPath = (path: string) =>
   path === "/favicon.svg" || path === "/robots.txt" || path.startsWith("/assets/") || path.startsWith("/provider-assets/") || path.startsWith("/fonts/");
 
+// Contexts whose Access identity was verified as the allow-listed human; used
+// to serve portal assets to remote browsers on the API origin.
+const verifiedContexts = new WeakSet<object>();
+export const identityVerified = (c: Context) => verifiedContexts.has(c);
+const markVerified = (c: Context) => verifiedContexts.add(c);
+
 const isServiceOrigin = (host: string) => host !== remoteHost() && Boolean(apiHost()) && host === apiHost() && Boolean(apiAudience()) && Boolean(serviceClientId());
 
 export async function security(c: Context, next: Next) {
@@ -60,7 +66,12 @@ export async function security(c: Context, next: Next) {
       if (!token || !accessTeam() || !apiAudience()) return c.json({ error: "Access authentication is not configured" }, 401);
       try {
         const { payload } = await verifyAccess(token, apiAudience());
-        if (payload.common_name !== serviceClientId()) return c.json({ error: "Service identity not allowed" }, 403);
+        if (payload.common_name !== serviceClientId()) {
+          // Client ids are non-secret identifiers; log the drift so proxy/origin
+          // token mismatches are diagnosable from the journal alone.
+          console.warn(`service identity mismatch: got ${payload.common_name ?? "(none)"}, expected ${serviceClientId()}`);
+          return c.json({ error: "Service identity not allowed" }, 403);
+        }
       } catch { return c.json({ error: "Invalid Access token" }, 401); }
     } else {
       if (!token || !accessTeam() || !mainAudience()) return c.json({ error: "Access authentication is not configured" }, 401);
@@ -82,6 +93,7 @@ export async function security(c: Context, next: Next) {
       } catch { }
     }
     if (!accepted) return c.json({ error: "Invalid Access token" }, 401);
+    markVerified(c);
   }
   await next();
   c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
@@ -99,6 +111,7 @@ export async function requireAdmin(c: Context, next: Next) {
       const { payload } = await verifyAccess(token, audience);
       if (payload.common_name) return c.json({ error: "The limits portal is not available to service identities" }, 403);
       if (lower(String(payload.email ?? "")) !== allowedEmail()) return c.json({ error: "Identity not allowed" }, 403);
+      markVerified(c);
       return await next();
     } catch { }
   }
