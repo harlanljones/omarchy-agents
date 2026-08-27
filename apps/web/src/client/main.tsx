@@ -2123,6 +2123,28 @@ function App() {
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
+  const navigate = (next: Nav) => {
+    if (next !== nav) window.history.pushState({}, "", navPaths[next]);
+    setNav(next);
+    setRail(false);
+  };
+  const openRail = () => {
+    returnFocus.current = document.activeElement as HTMLElement;
+    if (compactLayout) setRail(true);
+    else setRailCollapsed(false);
+    requestAnimationFrame(() =>
+      railRef.current?.querySelector<HTMLElement>("button,textarea")?.focus(),
+    );
+  };
+  const closeRail = () => {
+    if (compactLayout) {
+      setRail(false);
+      requestAnimationFrame(() => returnFocus.current?.focus());
+    } else {
+      setRailCollapsed(true);
+      requestAnimationFrame(() => railToggleRef.current?.focus());
+    }
+  };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -2152,28 +2174,6 @@ function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, rail, railCollapsed, closeRail]);
-  const navigate = (next: Nav) => {
-    if (next !== nav) window.history.pushState({}, "", navPaths[next]);
-    setNav(next);
-    setRail(false);
-  };
-  const openRail = () => {
-    returnFocus.current = document.activeElement as HTMLElement;
-    if (compactLayout) setRail(true);
-    else setRailCollapsed(false);
-    requestAnimationFrame(() =>
-      railRef.current?.querySelector<HTMLElement>("button,textarea")?.focus(),
-    );
-  };
-  const closeRail = () => {
-    if (compactLayout) {
-      setRail(false);
-      requestAnimationFrame(() => returnFocus.current?.focus());
-    } else {
-      setRailCollapsed(true);
-      requestAnimationFrame(() => railToggleRef.current?.focus());
-    }
-  };
   const trapRail = (event: React.KeyboardEvent) => {
     if (!compactLayout) return;
     if (event.key === "Escape") {
