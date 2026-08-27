@@ -66,11 +66,19 @@ export async function security(c: Context, next: Next) {
       if (!token || !accessTeam() || !apiAudience()) return c.json({ error: "Access authentication is not configured" }, 401);
       try {
         const { payload } = await verifyAccess(token, apiAudience());
-        if (payload.common_name !== serviceClientId()) {
-          // Client ids are non-secret identifiers; log the drift so proxy/origin
-          // token mismatches are diagnosable from the journal alone.
-          console.warn(`service identity mismatch: got ${payload.common_name ?? "(none)"}, expected ${serviceClientId()}`);
-          return c.json({ error: "Service identity not allowed" }, 403);
+        if (payload.common_name) {
+          // Service identity: the Worker's proxy token, or an impostor.
+          if (payload.common_name !== serviceClientId()) {
+            console.warn(`service identity mismatch: got ${payload.common_name}, expected ${serviceClientId()}`);
+            return c.json({ error: "Service identity not allowed" }, 403);
+          }
+        } else if (lower(String(payload.email ?? "")) === allowedEmail()) {
+          // The allow-listed human browsing on the API origin (the portal lives
+          // here, and the SPA fetches /api/* same-origin); their session JWT
+          // carries no common_name.
+          markVerified(c);
+        } else {
+          return c.json({ error: "Identity not allowed" }, 403);
         }
       } catch { return c.json({ error: "Invalid Access token" }, 401); }
     } else {

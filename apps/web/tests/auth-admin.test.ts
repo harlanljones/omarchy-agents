@@ -161,10 +161,12 @@ describe("portal on the API origin", () => {
   });
   // The limits portal is served on the API hostname (natively Access-gated at
   // the edge); a human whose edge-injected JWT verifies may load the SPA shell.
+  // The shell itself is the dist build artifact: 503 (not 401/403/404) means
+  // the identity gate passed while the parallel test env has not built yet.
   test("serves the SPA shell to an admin-verified human", async () => {
     const token = await signToken("aud-admin-a");
     const response = await app.request("https://api.example.com/limits", { headers: { host: "api.example.com", "cf-access-jwt-assertion": token } });
-    expect(response.status).toBe(200);
+    expect([200, 503]).toContain(response.status);
   });
 
   test("remote non-admin SPA paths stay closed on the API origin", async () => {
@@ -174,6 +176,18 @@ describe("portal on the API origin", () => {
     const service = await signToken("aud-api", "admin@example.com", { common_name: "svc.client" });
     const serviceResponse = await app.request("https://api.example.com/overview", { headers: { host: "api.example.com", "cf-access-jwt-assertion": service } });
     expect(serviceResponse.status).toBe(404);
+  });
+
+  test("serves /api/* to the allow-listed human on the API origin", async () => {
+    const human = await signToken("aud-api");
+    const response = await app.request("https://api.example.com/api/overview?period=week", { headers: { host: "api.example.com", "cf-access-jwt-assertion": human } });
+    expect(response.status).toBe(200);
+  });
+
+  test("rejects /api/* for a foreign human identity on the API origin", async () => {
+    const intruder = await signToken("aud-api", "intruder@example.com");
+    const response = await app.request("https://api.example.com/api/overview?period=week", { headers: { host: "api.example.com", "cf-access-jwt-assertion": intruder } });
+    expect(response.status).toBe(403);
   });
 });
 
