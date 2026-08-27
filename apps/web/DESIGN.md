@@ -23,6 +23,18 @@ colors:
   provider-antigravity: "#4285f4"
   provider-fireworks: "#ff6b22"
   provider-opencode: "#b478e6"
+  provider-fallback: "#77838d"
+  scrollbar: "#3b464e"
+  status-text: "#b7c0c6"
+  hairline-strong: "#46525b"
+  hairline-soft: "#52606a"
+  text-soft: "#c6ccd0"
+  text-softer: "#c7cdd1"
+  error-text: "#f0a5a5"
+  error-border: "#7a4141"
+  error-fill: "#f0b0b0"
+  overlay-scrim: "rgba(0, 0, 0, 0.5)"
+  overlay-shadow: "rgba(0, 0, 0, 0.32)"
 typography:
   display:
     fontFamily: '"IBM Plex Mono", monospace'
@@ -66,6 +78,24 @@ typography:
     fontWeight: 400
     lineHeight: 1.4
     letterSpacing: "normal"
+  micro:
+    fontFamily: '"IBM Plex Mono", monospace'
+    fontSize: "9px"
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: "0.04em"
+  caption:
+    fontFamily: '"IBM Plex Mono", monospace'
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.4
+    letterSpacing: "normal"
+  display-mobile:
+    fontFamily: '"IBM Plex Mono", monospace'
+    fontSize: "28px"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "-0.035em"
 rounded:
   chart: "2px"
   segment: "7px"
@@ -73,6 +103,8 @@ rounded:
   mark: "9px"
   group: "10px"
   nav: "12px"
+  micro: "3px"
+  hairline: "4px"
   round: "50%"
 spacing:
   xxs: "4px"
@@ -178,6 +210,12 @@ The palette is nearly monochrome and blue-cool, with a muted trophy gold for ori
 - **Signal White**: Primary text and the inverted primary-action surface.
 - **Operational Gray**: Supporting copy and inactive control labels.
 - **Instrument Gray**: Table headers, timestamps, axes, and tertiary metadata.
+- **Fallback Provider Gray**: The two-letter provider mark background and provider-absent chart segments when a provider SVG is missing.
+- **Status Text Gray**: The small uppercase status legends beside semantic dots.
+- **Scrollbar Graphite**: The custom scrollbar thumb over the console canvas.
+- **Hairline Strong / Hairline Soft**: Secondary structural strokes and inset control edges beyond the one-pixel Rule Gray.
+- **Text Soft / Text Softer**: Brighter table and metadata greys for dense rows that need to lift above Instrument Gray.
+- **Error Text / Error Border / Error Fill**: The red notice triad — `#f0a5a5` message text, `#7a4141` border, `#f0b0b0` faint fill — used only by the error notice and never as a general surface.
 
 ### Named Rules
 

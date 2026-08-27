@@ -1,0 +1,637 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-26T00:00:00Z",
+  "title": "Design System: Omarchy Agents",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#f2f4f5",
+        "tonalRamp": [
+          "#000000",
+          "#3c3d3d",
+          "#797a7a",
+          "#b6b7b8",
+          "#f5f7f8",
+          "#f8fafa",
+          "#fcfcfc",
+          "#ffffff"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#97a1a9",
+        "tonalRamp": [
+          "#000000",
+          "#26282a",
+          "#4c5054",
+          "#71797f",
+          "#b1b8be",
+          "#cbd0d4",
+          "#e5e8ea",
+          "#ffffff"
+        ]
+      },
+      "dim": {
+        "role": "neutral",
+        "displayName": "Dim",
+        "canonical": "#7f8a93",
+        "tonalRamp": [
+          "#000000",
+          "#202225",
+          "#40454a",
+          "#5f686e",
+          "#9fa7ae",
+          "#bfc4c9",
+          "#dfe2e4",
+          "#ffffff"
+        ]
+      },
+      "base": {
+        "role": "neutral",
+        "displayName": "Base",
+        "canonical": "#0b0d0f",
+        "tonalRamp": [
+          "#000000",
+          "#030304",
+          "#060608",
+          "#080a0b",
+          "#484a4b",
+          "#858687",
+          "#c2c2c3",
+          "#ffffff"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#111518",
+        "tonalRamp": [
+          "#000000",
+          "#040506",
+          "#080a0c",
+          "#0d1012",
+          "#4c5052",
+          "#888a8c",
+          "#c4c4c5",
+          "#ffffff"
+        ]
+      },
+      "lift": {
+        "role": "neutral",
+        "displayName": "Lift",
+        "canonical": "#171c20",
+        "tonalRamp": [
+          "#000000",
+          "#060708",
+          "#0c0e10",
+          "#111518",
+          "#515558",
+          "#8b8e90",
+          "#c5c6c7",
+          "#ffffff"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "canonical": "#283036",
+        "tonalRamp": [
+          "#000000",
+          "#0a0c0e",
+          "#14181b",
+          "#1e2428",
+          "#5e6468",
+          "#94989a",
+          "#c9cbcd",
+          "#ffffff"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Accent",
+        "canonical": "#d5ba64",
+        "tonalRamp": [
+          "#000000",
+          "#352e19",
+          "#6a5d32",
+          "#a08c4b",
+          "#e0cb8b",
+          "#eadcb2",
+          "#f4eed8",
+          "#ffffff"
+        ]
+      },
+      "focus": {
+        "role": "focus",
+        "displayName": "Focus",
+        "canonical": "#86b7ff",
+        "tonalRamp": [
+          "#000000",
+          "#222e40",
+          "#435c80",
+          "#6489bf",
+          "#a4c9ff",
+          "#c2dbff",
+          "#e1edff",
+          "#ffffff"
+        ]
+      },
+      "nav-deep": {
+        "role": "neutral",
+        "displayName": "Nav Deep",
+        "canonical": "#0e1113",
+        "tonalRamp": [
+          "#000000",
+          "#040405",
+          "#07080a",
+          "#0a0d0e",
+          "#4a4c4e",
+          "#868889",
+          "#c3c4c4",
+          "#ffffff"
+        ]
+      },
+      "hover-surface": {
+        "role": "neutral",
+        "displayName": "Hover Surface",
+        "canonical": "#1d2429",
+        "tonalRamp": [
+          "#000000",
+          "#07090a",
+          "#0e1214",
+          "#161b1f",
+          "#565b5e",
+          "#8e9294",
+          "#c6c8ca",
+          "#ffffff"
+        ]
+      },
+      "link": {
+        "role": "link",
+        "displayName": "Link",
+        "canonical": "#b7cee8",
+        "tonalRamp": [
+          "#000000",
+          "#2e343a",
+          "#5c6774",
+          "#899aae",
+          "#c9daee",
+          "#dbe6f4",
+          "#edf3f9",
+          "#ffffff"
+        ]
+      },
+      "status-ok": {
+        "role": "status",
+        "displayName": "Status Ok",
+        "canonical": "#65c18c",
+        "tonalRamp": [
+          "#000000",
+          "#193023",
+          "#326046",
+          "#4c9169",
+          "#8cd0a9",
+          "#b2e0c6",
+          "#d8f0e2",
+          "#ffffff"
+        ]
+      },
+      "status-warning": {
+        "role": "status",
+        "displayName": "Status Warning",
+        "canonical": "#e0b75c",
+        "tonalRamp": [
+          "#000000",
+          "#382e17",
+          "#705c2e",
+          "#a88945",
+          "#e8c985",
+          "#f0dbae",
+          "#f7edd6",
+          "#ffffff"
+        ]
+      },
+      "status-error": {
+        "role": "status",
+        "displayName": "Status Error",
+        "canonical": "#ee7777",
+        "tonalRamp": [
+          "#000000",
+          "#3c1e1e",
+          "#773c3c",
+          "#b25959",
+          "#f29999",
+          "#f6bbbb",
+          "#fbdddd",
+          "#ffffff"
+        ]
+      },
+      "provider-claude": {
+        "role": "provider",
+        "displayName": "Provider Claude",
+        "canonical": "#d97757",
+        "tonalRamp": [
+          "#000000",
+          "#361e16",
+          "#6c3c2c",
+          "#a35941",
+          "#e29981",
+          "#ecbbab",
+          "#f6ddd5",
+          "#ffffff"
+        ]
+      },
+      "provider-codex": {
+        "role": "provider",
+        "displayName": "Provider Codex",
+        "canonical": "#10a37f",
+        "tonalRamp": [
+          "#000000",
+          "#042920",
+          "#085240",
+          "#0c7a5f",
+          "#4cba9f",
+          "#88d1bf",
+          "#c3e8df",
+          "#ffffff"
+        ]
+      },
+      "provider-cline": {
+        "role": "provider",
+        "displayName": "Provider Cline",
+        "canonical": "#6bcb77",
+        "tonalRamp": [
+          "#000000",
+          "#1b331e",
+          "#36663c",
+          "#509859",
+          "#90d899",
+          "#b5e5bb",
+          "#daf2dd",
+          "#ffffff"
+        ]
+      },
+      "provider-antigravity": {
+        "role": "provider",
+        "displayName": "Provider Antigravity",
+        "canonical": "#4285f4",
+        "tonalRamp": [
+          "#000000",
+          "#10213d",
+          "#21427a",
+          "#3264b7",
+          "#71a4f7",
+          "#a0c2fa",
+          "#d0e0fc",
+          "#ffffff"
+        ]
+      },
+      "provider-fireworks": {
+        "role": "provider",
+        "displayName": "Provider Fireworks",
+        "canonical": "#ff6b22",
+        "tonalRamp": [
+          "#000000",
+          "#401b08",
+          "#803611",
+          "#bf501a",
+          "#ff9059",
+          "#ffb590",
+          "#ffdac8",
+          "#ffffff"
+        ]
+      },
+      "provider-opencode": {
+        "role": "provider",
+        "displayName": "Provider Opencode",
+        "canonical": "#b478e6",
+        "tonalRamp": [
+          "#000000",
+          "#2d1e3a",
+          "#5a3c73",
+          "#875aac",
+          "#c79aec",
+          "#dabcf2",
+          "#ecddf9",
+          "#ffffff"
+        ]
+      },
+      "provider-fallback": {
+        "role": "provider",
+        "displayName": "Provider Fallback",
+        "canonical": "#77838d",
+        "tonalRamp": [
+          "#000000",
+          "#1e2123",
+          "#3c4246",
+          "#59626a",
+          "#99a2aa",
+          "#bbc1c6",
+          "#dde0e2",
+          "#ffffff"
+        ]
+      },
+      "scrollbar": {
+        "role": "neutral",
+        "displayName": "Scrollbar",
+        "canonical": "#3b464e",
+        "tonalRamp": [
+          "#000000",
+          "#0f1214",
+          "#1e2327",
+          "#2c343a",
+          "#6c747a",
+          "#9da2a6",
+          "#ced1d3",
+          "#ffffff"
+        ]
+      },
+      "status-text": {
+        "role": "status",
+        "displayName": "Status Text",
+        "canonical": "#b7c0c6",
+        "tonalRamp": [
+          "#000000",
+          "#2e3032",
+          "#5c6063",
+          "#899094",
+          "#c9d0d4",
+          "#dbe0e2",
+          "#edeff1",
+          "#ffffff"
+        ]
+      },
+      "hairline-strong": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "canonical": "#46525b",
+        "tonalRamp": [
+          "#000000",
+          "#121417",
+          "#23292e",
+          "#343e44",
+          "#747d84",
+          "#a2a8ad",
+          "#d1d4d6",
+          "#ffffff"
+        ]
+      },
+      "hairline-soft": {
+        "role": "neutral",
+        "displayName": "Hairline Soft",
+        "canonical": "#52606a",
+        "tonalRamp": [
+          "#000000",
+          "#14181a",
+          "#293035",
+          "#3e4850",
+          "#7d888f",
+          "#a8b0b4",
+          "#d4d7da",
+          "#ffffff"
+        ]
+      },
+      "text-soft": {
+        "role": "neutral",
+        "displayName": "Text Soft",
+        "canonical": "#c6ccd0",
+        "tonalRamp": [
+          "#000000",
+          "#323334",
+          "#636668",
+          "#94999c",
+          "#d4d9dc",
+          "#e2e6e8",
+          "#f1f2f3",
+          "#ffffff"
+        ]
+      },
+      "text-softer": {
+        "role": "neutral",
+        "displayName": "Text Softer",
+        "canonical": "#c7cdd1",
+        "tonalRamp": [
+          "#000000",
+          "#323334",
+          "#646668",
+          "#959a9d",
+          "#d5dadc",
+          "#e3e6e8",
+          "#f1f2f4",
+          "#ffffff"
+        ]
+      },
+      "error-text": {
+        "role": "neutral",
+        "displayName": "Error Text",
+        "canonical": "#f0a5a5",
+        "tonalRamp": [
+          "#000000",
+          "#3c2929",
+          "#785252",
+          "#b47c7c",
+          "#f4bcbc",
+          "#f8d2d2",
+          "#fbe8e8",
+          "#ffffff"
+        ]
+      },
+      "error-border": {
+        "role": "neutral",
+        "displayName": "Error Border",
+        "canonical": "#7a4141",
+        "tonalRamp": [
+          "#000000",
+          "#1e1010",
+          "#3d2020",
+          "#5c3131",
+          "#9b7070",
+          "#bca0a0",
+          "#ded0d0",
+          "#ffffff"
+        ]
+      },
+      "error-fill": {
+        "role": "neutral",
+        "displayName": "Error Fill",
+        "canonical": "#f0b0b0",
+        "tonalRamp": [
+          "#000000",
+          "#3c2c2c",
+          "#785858",
+          "#b48484",
+          "#f4c4c4",
+          "#f8d8d8",
+          "#fbebeb",
+          "#ffffff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Analyst and major panel headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Explanations and compact operational copy."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Ranks and token totals."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Table headers, status text, timestamps, axes."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Buttons, segmented options, form controls."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Brand and local tiny labels (9px)."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Control-adjacent small mono text (11px)."
+      }
+    },
+    "shadows": [
+      {
+        "name": "ready-glow",
+        "value": "0 3px 8px rgba(101,193,140,0.28)",
+        "purpose": "Halo for the ready status dot."
+      },
+      {
+        "name": "drawer-cast",
+        "value": "-14px 0 36px rgba(0,0,0,0.32)",
+        "purpose": "Separates the analyst drawer from the canvas."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.16,1,0.3,1)",
+        "purpose": "Default easing for state transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "tablet",
+        "value": "1100px"
+      },
+      {
+        "name": "mobile",
+        "value": "720px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Inverted action for the analyst submit.",
+      "html": "<button class=\"ds-btn-primary\">ASK</button>",
+      "css": ".ds-btn-primary{background:#f2f4f5;color:#0b0d0f;border:1px solid #0b0d0f;border-radius:8px;padding:9px 12px;font:500 12px 'Liberation Sans',sans-serif;cursor:pointer}.ds-btn-primary:hover{background:#fff}.ds-btn-primary:focus-visible{outline:2px solid #86b7ff;outline-offset:3px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Standard control fill.",
+      "html": "<button class=\"ds-btn-secondary\">Retry</button>",
+      "css": ".ds-btn-secondary{background:#171c20;color:#f2f4f5;border:1px solid #283036;border-radius:8px;padding:9px 12px;font:400 12px 'Liberation Sans',sans-serif;cursor:pointer}.ds-btn-secondary:hover{background:#1d2429}"
+    },
+    {
+      "name": "Segmented Option",
+      "kind": "button",
+      "refersTo": "segmented-option",
+      "description": "Period or task-size selector.",
+      "html": "<button class=\"ds-seg\" aria-pressed=\"true\">Week</button>",
+      "css": ".ds-seg{background:transparent;color:#97a1a9;border:0;border-radius:7px;padding:7px 12px;font:400 12px 'Liberation Sans',sans-serif;cursor:pointer}.ds-seg[aria-pressed='true']{background:#171c20;color:#f2f4f5}"
+    },
+    {
+      "name": "Status Indicator",
+      "kind": "custom",
+      "refersTo": "status",
+      "description": "Semantic dot plus mandatory text label.",
+      "html": "<span class=\"ds-status\"><i></i>Indexed</span>",
+      "css": ".ds-status{display:inline-flex;align-items:center;gap:7px;color:#b7c0c6;font:500 10px 'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.04em}.ds-status i{width:7px;height:7px;border-radius:50%;background:#65c18c}"
+    },
+    {
+      "name": "Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Primary destination in the left rail.",
+      "html": "<button class=\"ds-nav\" aria-current=\"page\"><i></i><span>Overview</span></button>",
+      "css": ".ds-nav{display:flex;flex-direction:column;align-items:center;gap:5px;background:transparent;border:0;border-radius:12px;padding:10px 4px;color:#97a1a9;cursor:pointer}.ds-nav[aria-current='page']{background:#171c20;color:#f2f4f5}.ds-nav i{width:30px;height:26px;border:1px solid #283036;border-radius:8px}.ds-nav[aria-current='page'] i{border-color:#d5ba64}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Evidence Control Room",
+    "overview": "Omarchy Agents inherits the visual world of an Omarchy system console: dark, quiet, tightly ruled, and built for sustained scrutiny. Terminal-adjacent typography, near-black tonal layers, persistent navigation and analyst edges, and small operational signals rather than decorative illustration.",
+    "keyCharacteristics": [
+      "Dark, low-chroma Omarchy console surfaces.",
+      "Ruled data regions instead of floating dashboard cards.",
+      "Monospaced headings, labels, metrics, timestamps, and evidence.",
+      "Persistent navigation and analyst rails with responsive drawer and bottom-navigation.",
+      "Restrained gold accent, semantic status dots, provider color for attribution only.",
+      "Keyboard-visible focus, non-color status labels, reduced-motion behavior."
+    ],
+    "rules": [
+      {
+        "name": "The Gold Is Orientation Rule",
+        "body": "Reserve gold for current-location emphasis and the trophy identity; do not spread it across charts, buttons, or surfaces.",
+        "section": "colors"
+      },
+      {
+        "name": "The Provider Ownership Rule",
+        "body": "Provider hues belong to provider marks, chart segments, and share indicators; they never replace semantic status colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Labeled Signal Rule",
+        "body": "Color may reinforce status, but the adjacent text must carry the meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The Instrument Type Rule",
+        "body": "Use mono wherever the user compares, locates, or verifies; use sans-serif for explanation and conversation.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled Field Rule",
+        "body": "Prefer full-width sections, aligned columns, and one-pixel separators over isolated card mosaics.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-by-Default Rule",
+        "body": "Resting surfaces do not float; only the overlaid analyst drawer receives structural elevation.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve the desktop hierarchy of navigation, comparison canvas, and advisory analyst rail.",
+      "Do keep text equivalents for status color and chart content.",
+      "Do retain indexed and metrics-only as distinct coverage labels."
+    ],
+    "donts": [
+      "Don't turn the interface into floating rounded cards or add decorative shadows.",
+      "Don't use gold as a general brand wash or status color.",
+      "Don't let provider colors imply success, warning, or error."
+    ]
+  }
+}

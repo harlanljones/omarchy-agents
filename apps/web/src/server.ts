@@ -20,6 +20,21 @@ app.use(compress());
 app.use("*", security);
 app.use("/limits", requireAdmin);
 app.use("/limits/*", requireAdmin);
+// Cache-Control: hashed build assets are content-addressed and immutable;
+// HTML and JSON must always revalidate so releases and live data propagate.
+app.use("*", async (c, next) => {
+  await next();
+  const ct = (c.res.headers.get("content-type") ?? "").split(";")[0].trim();
+  if (ct === "text/html" || ct === "application/json") {
+    c.header("Cache-Control", "no-cache");
+  } else if (
+    /^(text\/javascript|application\/javascript|text\/css|font\/|application\/font|application\/woff|image\/)/.test(
+      ct,
+    )
+  ) {
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+  }
+});
 export function collectorTimeseries(days: number) {
   const records = (db.query("SELECT record_json FROM usage_records").all() as any[])
     .flatMap((row) => {

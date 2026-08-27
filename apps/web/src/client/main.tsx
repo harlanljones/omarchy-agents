@@ -1,12 +1,12 @@
 // @ts-nocheck -- Visx's generic stack inference and fire-and-forget effects are validated at runtime.
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Group } from "@visx/group";
-import { BarStack } from "@visx/shape";
-import { scaleBand, scaleLinear, scaleOrdinal } from "@visx/scale";
 import type { AdviceRow, AdviceVerdict, AlertsResponse, IncidentsResponse, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
 import "./styles.css";
+import { colors, fmt } from "./theme";
+
+const HistoryChart = lazy(() => import("./chart"));
 
 type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
 const navPaths: Record<Nav, string> = {
@@ -32,18 +32,6 @@ type HistorySeries = {
   rows: any[];
   source: "collector" | "indexed";
 };
-const colors: Record<string, string> = {
-  claude: "#d97757",
-  codex: "#10a37f",
-  cline: "#6bcb77",
-  antigravity: "#4285f4",
-  fireworks: "#ff6b22",
-  opencode: "#b478e6",
-};
-const fmt = new Intl.NumberFormat("en", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 const duration = (ms: number) => {
   if (!(ms > 0)) return "now";
   if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`;
@@ -268,214 +256,6 @@ function EventsSkeleton() {
   );
 }
 
-function HistoryChart({
-  rows,
-  source = "indexed",
-  updating = false,
-}: {
-  rows: any[];
-  source?: "collector" | "indexed";
-  updating?: boolean;
-}) {
-  const activityName = source === "collector" ? "Token activity" : "Indexed activity";
-  const sourceName = source === "collector" ? "Collector totals" : "Indexed session totals";
-  if (!rows.length)
-    return (
-      <div className="chart-empty">
-        <strong>{activityName}</strong>
-        <span>
-          History will appear as transcript sessions are indexed. Rankings above
-          remain available from usage collectors.
-        </span>
-      </div>
-    );
-  const width = 760,
-    height = 320,
-    margin = { top: 16, right: 12, bottom: 42, left: 64 };
-  const providers = [...new Set(rows.map((r) => r.provider))] as string[],
-    rawDays = [...new Set(rows.map((r) => r.day))].sort() as string[],
-    days = rawDays.length < 2
-      ? rawDays
-      : Array.from(
-          {
-            length:
-              Math.floor(
-                (Date.parse(`${rawDays.at(-1)}T00:00:00Z`) -
-                  Date.parse(`${rawDays[0]}T00:00:00Z`)) /
-                  86400000,
-              ) + 1,
-          },
-          (_, index) =>
-            new Date(
-              Date.parse(`${rawDays[0]}T00:00:00Z`) + index * 86400000,
-            )
-              .toISOString()
-              .slice(0, 10),
-        );
-  const data = days.map((day) =>
-    Object.assign(
-      { day },
-      Object.fromEntries(
-        providers.map((p) => [
-          p,
-          Number(
-            rows.find((r) => r.day === day && r.provider === p)?.tokens ?? 0,
-          ),
-        ]),
-      ),
-    ),
-  );
-  const x = scaleBand({
-    domain: days,
-    range: [0, width - margin.left - margin.right],
-    padding: 0.22,
-  });
-  const max = Math.max(
-    1,
-    ...data.map((d) => providers.reduce((s, p) => s + Number(d[p]), 0)),
-  );
-  const y = scaleLinear({
-    domain: [0, max],
-    range: [height - margin.top - margin.bottom, 0],
-    nice: true,
-  });
-  const yMax = Number(y.domain()[1]) || max;
-  const yTicks = Array.from({ length: 5 }, (_, index) => (yMax / 4) * index);
-  const totals = data.map((day) => ({
-    day: day.day,
-    tokens: providers.reduce((sum, provider) => sum + Number(day[provider]), 0),
-  }));
-  const totalIndexed = totals.reduce((sum, day) => sum + day.tokens, 0);
-  const peak = totals.reduce(
-    (current, day) => (day.tokens > current.tokens ? day : current),
-    { day: "", tokens: 0 },
-  );
-  const providerTotals = providers.map((provider) => ({
-    provider,
-    tokens: data.reduce((sum, day) => sum + Number(day[provider]), 0),
-  }));
-  const color = scaleOrdinal({
-    domain: providers,
-    range: providers.map((p) => colors[p] ?? "#77838d"),
-  });
-  const labelStep = Math.max(1, Math.ceil(days.length / 7));
-  const dailySummary = totals
-    .filter((day) => day.tokens > 0)
-    .map((day) => `${day.day}: ${fmt.format(day.tokens)} tokens`)
-    .join("; ");
-  return (
-    <figure className={`chart ${updating ? "is-updating" : ""}`}>
-      <figcaption>
-        <div className="chart-heading">
-          <strong id="activity-title">{activityName}</strong>
-          <span>
-            {updating
-              ? `Updating ${activityName.toLowerCase()}…`
-              : days.length
-                ? `${sourceName} · ${days[0]} — ${days.at(-1)}`
-                : "Waiting for indexed sessions"}
-          </span>
-        </div>
-        <dl className="chart-summary" id="activity-summary">
-          <div>
-            <dt>{source === "collector" ? "Reported tokens" : "Indexed tokens"}</dt>
-            <dd>{fmt.format(totalIndexed)}</dd>
-          </div>
-          <div>
-            <dt>Active days</dt>
-            <dd>{totals.filter((day) => day.tokens > 0).length}</dd>
-          </div>
-          <div>
-            <dt>Peak day</dt>
-            <dd>{peak.day ? `${peak.day.slice(5)} · ${fmt.format(peak.tokens)}` : "—"}</dd>
-          </div>
-        </dl>
-      </figcaption>
-      <div className="chart-legend" role="list" aria-label={`Providers in ${activityName.toLowerCase()}`}>
-        {providerTotals.map(({ provider, tokens }) => (
-          <span role="listitem" key={provider}>
-            <i style={{ background: colors[provider] ?? "#77838d" }} aria-hidden="true" />
-            <b>{provider}</b>
-            <em>{fmt.format(tokens)}</em>
-          </span>
-        ))}
-      </div>
-      <svg
-        role="img"
-        aria-labelledby="activity-title activity-summary"
-        aria-label={`Stacked token totals over ${days.length} days for ${providers.join(", ") || "no providers"}`}
-        viewBox={`0 0 ${width} ${height}`}
-      >
-        <Group left={margin.left} top={margin.top}>
-          {yTicks.map((tick) => (
-            <g key={tick} className="chart-tick">
-              <line
-                x1={0}
-                x2={width - margin.left - margin.right}
-                y1={y(tick)}
-                y2={y(tick)}
-              />
-              <text x={-12} y={y(tick) + 3} textAnchor="end">
-                {fmt.format(tick)}
-              </text>
-            </g>
-          ))}
-          <BarStack
-            data={data}
-            keys={providers}
-            x={(d) => d.day}
-            xScale={x}
-            yScale={y}
-            color={color}
-          >
-            {(stacks) =>
-              stacks.map((stack) =>
-                stack.bars
-                  .filter((bar) => bar.height > 0)
-                  .map((bar) => (
-                    <rect
-                      key={`${stack.key}-${bar.index}`}
-                      x={bar.x}
-                      y={bar.y}
-                      width={bar.width}
-                      height={bar.height}
-                      fill={bar.color}
-                      rx="2"
-                    >
-                      <title>
-                        {stack.key}: {fmt.format(Number(bar.bar.data[stack.key]))} tokens
-                      </title>
-                    </rect>
-                  )),
-              )
-            }
-          </BarStack>
-          {days.map(
-            (d, i) =>
-              (i % labelStep === 0 ||
-                i === days.length - 1) && (
-                <text
-                  key={d}
-                  x={(x(d) ?? 0) + x.bandwidth() / 2}
-                  y={height - margin.top - margin.bottom + 22}
-                  textAnchor="middle"
-                >
-                  {d.slice(5)}
-                </text>
-              ),
-          )}
-        </Group>
-      </svg>
-      <p className="sr-only">
-        Token volume by day from {sourceName.toLowerCase()}. {dailySummary || "No token volume yet."}
-        {source === "collector"
-          ? "Use standings and source coverage for the reported provider totals."
-          : "Use the sessions table for exact indexed values and supporting logs."}
-      </p>
-    </figure>
-  );
-}
-
 function Overview({
   openRail,
   railOpen,
@@ -502,7 +282,17 @@ function Overview({
     [error, setError] = useState(""),
     [loadingBoard, setLoadingBoard] = useState(true),
     [loadingSeries, setLoadingSeries] = useState(true),
-    [reload, setReload] = useState(0);
+    [reload, setReload] = useState(0),
+    [onboardDismissed, setOnboardDismissed] = useState(
+      () => {
+        try { return localStorage.getItem("omarchy-onboarded") === "1"; }
+        catch { return false; }
+      },
+    );
+  const dismissOnboard = () => {
+    try { localStorage.setItem("omarchy-onboarded", "1"); } catch {}
+    setOnboardDismissed(true);
+  };
   const updateUrl = (nextPeriod: string, nextProject: string) => {
     const url = new URL(window.location.href);
     url.pathname = navPaths.overview;
@@ -552,8 +342,28 @@ function Overview({
     updateUrl(period, project);
     return () => controller.abort();
   }, [period, project, reload]);
+  const showOnboard =
+    !loadingBoard &&
+    !loadingSeries &&
+    !error &&
+    board.rows.length === 0 &&
+    series.rows.length === 0 &&
+    !onboardDismissed;
   return (
     <div className="overview">
+      {showOnboard && (
+        <section className="notice onboard" aria-label="Get started">
+          <div>
+            <strong>Index your first agent logs</strong>
+            <p>
+              This console reads locally indexed evidence. Run the indexer to
+              populate standings, the history chart, and the sessions table.
+            </p>
+            <code className="onboard-cmd">bun src/cli.ts index</code>
+          </div>
+          <button className="button" onClick={dismissOnboard}>Dismiss</button>
+        </section>
+      )}
       <section className="scorehead">
         <div>
           <h1>Omarchy Agents</h1>
@@ -690,9 +500,9 @@ function Overview({
           </tbody>
         </table>
       </section>
-      {loadingSeries && !series.rows.length
-        ? <ChartSkeleton />
-        : <HistoryChart rows={series.rows} source={series.source} updating={loadingSeries} />}
+      <Suspense fallback={<ChartSkeleton />}>
+        <HistoryChart rows={series.rows} source={series.source} updating={loadingSeries} />
+      </Suspense>
       <section className="coverage">
         <h2>Source coverage</h2>
         {loadingBoard && !board.freshness?.length
@@ -2264,6 +2074,19 @@ function Settings() {
           operations—never a shell.
         </p>
       </section>
+      <section>
+        <h2>Keyboard</h2>
+        <dl>
+          <div>
+            <dt>1 – 5</dt>
+            <dd>Jump to Overview, Logs, Analyst, Settings, or Limits</dd>
+          </div>
+          <div>
+            <dt>Esc</dt>
+            <dd>Close the analyst drawer</dd>
+          </div>
+        </dl>
+      </section>
       {notice && (
         <p className="notice" role="status">
           {notice}
@@ -2300,6 +2123,35 @@ function App() {
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      )
+        return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const map: Record<string, Nav> = {
+        "1": "overview",
+        "2": "logs",
+        "3": "analyst",
+        "4": "settings",
+        "5": "limits",
+      };
+      if (map[event.key]) {
+        event.preventDefault();
+        navigate(map[event.key]);
+        return;
+      }
+      if (event.key === "Escape" && (rail || !railCollapsed)) closeRail();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate, rail, railCollapsed, closeRail]);
   const navigate = (next: Nav) => {
     if (next !== nav) window.history.pushState({}, "", navPaths[next]);
     setNav(next);
@@ -2450,8 +2302,50 @@ function App() {
   );
 }
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error) {
+    console.error("Unhandled view error", error);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="shell">
+          <main>
+            <div
+              className="notice error"
+              role="alert"
+              style={{ maxWidth: 680, margin: "14vh auto", display: "grid", gap: 12 }}
+            >
+              <strong>A view hit an unexpected error and was paused.</strong>
+              <span>{this.state.error.message}</span>
+              <Button
+                onClick={() => {
+                  this.setState({ error: null });
+                  window.location.reload();
+                }}
+              >
+                Reload the dashboard
+              </Button>
+            </div>
+          </main>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );

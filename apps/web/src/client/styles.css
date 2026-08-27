@@ -15,6 +15,13 @@
   --line: #283036;
   --accent: #d5ba64;
   --focus: #86b7ff;
+  --status-ok: #65c18c;
+  --status-warn: #e0b75c;
+  --status-error: #ee7777;
+  --status-text: #b7c0c6;
+  --error-text: #f0a5a5;
+  --error-border: #7a4141;
+  --error-fill: #f0b0b0;
   font-family: "Liberation Sans", "Noto Sans", system-ui, sans-serif;
   background: var(--base);
   color: var(--ink);
@@ -38,6 +45,7 @@ input,
 select,
 textarea {
   font: inherit;
+  caret-color: var(--accent);
 }
 button {
   color: inherit;
@@ -200,7 +208,7 @@ h3,
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #b7c0c6;
+  color: var(--status-text);
   font: 500 10px "IBM Plex Mono";
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -209,14 +217,14 @@ h3,
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #65c18c;
+  background: var(--status-ok);
   box-shadow: 0 3px 8px rgba(101, 193, 140, 0.28);
 }
 .status.warn i {
-  background: #e0b75c;
+  background: var(--status-warn);
 }
 .status.error i {
-  background: #ee7777;
+  background: var(--status-error);
 }
 main {
   min-width: 0;
@@ -473,6 +481,18 @@ select {
 .is-updating {
   opacity: 0.45;
   transition: opacity 0.16s ease;
+}
+.bar-rise {
+  transform-origin: bottom;
+  animation: bar-rise 450ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
 }
 .sk-plot {
   position: relative;
@@ -859,7 +879,7 @@ select {
   font-size: 10px;
 }
 .event.error pre {
-  color: #f0a5a5;
+  color: var(--error-text);
 }
 .settings {
   display: grid;
@@ -910,10 +930,32 @@ select {
   font-size: 12px;
 }
 .notice.error {
-  border-color: #7a4141;
-  color: #f0b0b0;
+  border-color: var(--error-border);
+  color: var(--error-fill);
   display: grid;
   gap: 4px;
+}
+.onboard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.onboard p {
+  margin: 4px 0 8px;
+  color: var(--dim);
+  max-width: 60ch;
+}
+.onboard-cmd {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--base);
+  font: inherit;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  color: var(--ink);
 }
 .mobile-nav {
   display: none;
@@ -1040,7 +1082,8 @@ select {
     border: 0;
     background: transparent;
     color: var(--muted);
-    padding: 15px 4px;
+    padding: 14px 4px;
+    min-height: 44px;
     font-size: 10px;
   }
   .mobile-nav button[aria-current="page"] {
