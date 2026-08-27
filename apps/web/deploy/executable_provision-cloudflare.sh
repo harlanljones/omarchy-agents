@@ -32,6 +32,19 @@ request() {
   rm -f "$tmp"
 }
 
+request_soft() {
+  local tmp status
+  tmp=$(mktemp)
+  status=$(curl --silent --show-error -o "$tmp" -w '%{http_code}' "${auth[@]}" "$@") || true
+  if [[ $status =~ ^2 ]]; then
+    cat "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
 tunnel_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel?name=$tunnel_name&is_deleted=false" | jq -r '.result[0].id // empty')
 if [[ -z $tunnel_id ]]; then
   tunnel_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel" --data "$(jq -nc --arg name "$tunnel_name" '{name:$name,config_src:"cloudflare"}')" | jq -er '.result.id')
@@ -46,13 +59,22 @@ else request -X POST "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records" --data "$dns_b
 
 worker_script="omarchy-agents"
 if [[ -n $WORKER_HOSTNAME && $WORKER_HOSTNAME != "$host" ]]; then
-  subdomain=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | jq -r '.result.subdomain')
-  worker_target="$worker_script.$subdomain.workers.dev"
+  zone_name=$(request "$api/zones/$CLOUDFLARE_ZONE_ID" | jq -r '.result.name')
   wdns_id=$(request "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=CNAME&name=$WORKER_HOSTNAME" | jq -r '.result[0].id // empty')
-  wdns_body=$(jq -nc --arg name "$WORKER_HOSTNAME" --arg content "$worker_target" '{type:"CNAME",name:$name,content:$content,proxied:true}')
-  if [[ -n $wdns_id ]]; then request -X PUT "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records/$wdns_id" --data "$wdns_body" >/dev/null
-  else request -X POST "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records" --data "$wdns_body" >/dev/null; fi
-  printf 'Ensured proxied DNS %s -> %s (Worker).\n' "$WORKER_HOSTNAME" "$worker_target"
+  wdns_body=$(jq -nc --arg name "$WORKER_HOSTNAME" --arg content "$zone_name" '{type:"CNAME",name:$name,content:$content,proxied:true}')
+  if [[ -n $wdns_id ]]; then
+    request -X PUT "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records/$wdns_id" --data "$wdns_body" >/dev/null
+    printf 'Updated proxied DNS %s -> %s.\n' "$WORKER_HOSTNAME" "$zone_name"
+  elif request_soft -X POST "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records" --data "$wdns_body" >/dev/null; then
+    printf 'Created proxied DNS %s -> %s.\n' "$WORKER_HOSTNAME" "$zone_name"
+  else
+    printf 'NOTE: could not create DNS for %s (it may already be managed by Workers / a custom domain). Ensure %s is a proxied hostname in zone %s (it currently appears to be Worker-managed — nothing to do).\n' "$WORKER_HOSTNAME" "$WORKER_HOSTNAME" "$zone_name"
+  fi
+  if request_soft -X POST "$api/zones/$CLOUDFLARE_ZONE_ID/workers/routes" --data "$(jq -nc --arg p "$WORKER_HOSTNAME/*" --arg s "$worker_script" '{pattern:$p,script:$s}')" >/dev/null; then
+    printf 'Created Worker route %s/* -> %s.\n' "$WORKER_HOSTNAME" "$worker_script"
+  else
+    printf 'NOTE: could not create the Worker route automatically (the API token needs Zone:Workers Routes permission, or it is already managed by Workers). If needed, attach the Worker with: bunx wrangler deploy --route "%s/*"\n' "$WORKER_HOSTNAME"
+  fi
 fi
 
 otp_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/identity_providers" | jq -r '.result[] | select(.type=="onetimepin") | .id' | head -1)
@@ -98,7 +120,7 @@ if [[ -n ${SERVICE_TOKEN_CLIENT_ID:-} ]]; then
   :
 else
   svc_policy_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" | jq -r '.result[] | select(.name=="Worker proxy") | .id' | head -1)
-  svc_policy_body=$(jq -nc --arg tid "$svc_id" '{name:"Worker proxy",decision:"service_auth",include:[{service_token:{token_id:$tid}}]}')
+  svc_policy_body=$(jq -nc --arg tid "$svc_id" '{name:"Worker proxy",decision:"allow",include:[{service_token:{token_id:$tid}}]}')
   if [[ -n $svc_policy_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies/$svc_policy_id" --data "$svc_policy_body" >/dev/null
   else request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id/policies" --data "$svc_policy_body" >/dev/null; fi
 fi
@@ -142,5 +164,5 @@ printf 'Provisioned tunnel %s and one Access application covering the API origin
 printf 'Next:\n'
 printf '  1. cd apps/web && bunx wrangler secret put ACCESS_CLIENT_ID      # %s\n' "$svc_client_id"
 printf '  2. bunx wrangler secret put ACCESS_CLIENT_SECRET                 # the secret saved above\n'
-printf '  3. Deploy the Worker so its dashboard hostname resolves: cd apps/web && bunx wrangler deploy. This script already attached %s to the same Access application and created its proxied DNS (CNAME -> the Worker) because WORKER_HOSTNAME was set; until the Worker is deployed and behind Access the portal fails closed (401). Set DASHBOARD_HOSTNAME=<browser-facing hostname> in %s/dashboard.env if it differs from %s.\n' "${WORKER_HOSTNAME:-<dashboard hostname>}" "$config_dir" "$host"
+printf '  3. This script attached %s to the same Access application and created its proxied DNS. If the run printed a NOTE about the Worker route, deploy with: cd apps/web && bunx wrangler deploy --route "%s/*" (the API token needs Zone:Workers Routes permission to do this automatically). Until the Worker is deployed and %s is behind Access, the portal fails closed (401). Set DASHBOARD_HOSTNAME=<browser-facing hostname> in %s/dashboard.env if it differs from %s.\n' "${WORKER_HOSTNAME:-<dashboard hostname>}" "${WORKER_HOSTNAME:-<dashboard hostname>}" "${WORKER_HOSTNAME:-<dashboard hostname>}" "$config_dir" "$host"
 printf '  4. systemctl --user enable --now omarchy-agents-tunnel.service && systemctl --user restart omarchy-agents-dashboard.service\n'
