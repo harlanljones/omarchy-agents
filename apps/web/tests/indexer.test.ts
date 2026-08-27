@@ -37,3 +37,22 @@ describe("JSONL source adapter", () => {
   });
 });
 function readFile(path:string){ return require("node:fs").readFileSync(path,"utf8") }
+
+describe("usage record intake", () => {
+  test("NaN counters sanitize to zero instead of discarding the whole record", async () => {
+    const { UsageRecordV1 } = await import("../src/shared/schemas");
+    const record = UsageRecordV1.parse({
+      id: "collector-test",
+      todayTotalTokens: NaN,
+      recentDays: [{ date: "2026-08-27", messageCount: NaN }, { date: "2026-08-28" }],
+      todayTokensByModel: { "glm-5.3-flash": NaN },
+      limits: [{ label: "5h", percent: NaN }]
+    });
+    expect(record.todayTotalTokens).toBe(0);
+    expect(record.recentDays![0].messageCount).toBe(0);
+    expect(record.recentDays![1].messageCount).toBe(0);
+    expect((record.todayTokensByModel as any)["glm-5.3-flash"]).toBe(0);
+    expect(record.limits![0].percent).toBe(0);
+    expect(UsageRecordV1.parse({ id: "coerce", todaySessions: "5" }).todaySessions).toBe(5);
+  });
+});

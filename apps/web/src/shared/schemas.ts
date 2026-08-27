@@ -1,26 +1,32 @@
 import { z } from "zod";
 
+// Collectors occasionally emit NaN/Infinity (scrape races, div-by-zero).
+// z.coerce.number() rejects NaN, which would void the ENTIRE provider record —
+// one bad counter must coerce to 0 instead of discarding every other field.
+const finite = (v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? 0 : v);
+const safeNumber = z.preprocess(finite, z.coerce.number());
+
 const tokenBucket = z.object({
-  inputTokens: z.coerce.number().optional(), outputTokens: z.coerce.number().optional(),
-  cacheReadInputTokens: z.coerce.number().optional(), cacheCreationInputTokens: z.coerce.number().optional()
+  inputTokens: safeNumber.optional(), outputTokens: safeNumber.optional(),
+  cacheReadInputTokens: safeNumber.optional(), cacheCreationInputTokens: safeNumber.optional()
 }).passthrough();
 
 export const LimitWindowRecord = z.object({
-  label: z.string(), percent: z.coerce.number(),
+  label: z.string(), percent: safeNumber,
   resetsAt: z.string().optional(), title: z.string().optional()
 }).passthrough();
 
 export const BalanceRecord = z.object({
-  remaining: z.coerce.number(), funded: z.coerce.number().optional(), spent: z.coerce.number().optional(),
+  remaining: safeNumber, funded: safeNumber.optional(), spent: safeNumber.optional(),
   currency: z.string().optional(), estimated: z.boolean().optional()
 }).passthrough();
 
 export const UsageRecordV1 = z.object({
-  id: z.string(), name: z.string().optional(), todayTotalTokens: z.coerce.number().optional(),
-  todayPrompts: z.coerce.number().optional(), todaySessions: z.coerce.number().optional(),
-  totalPrompts: z.coerce.number().optional(), totalSessions: z.coerce.number().optional(), activeDays: z.coerce.number().optional(),
-  recentDays: z.array(z.object({ date: z.string(), messageCount: z.coerce.number().default(0) }).passthrough()).optional(),
-  modelUsage: z.record(z.string(), tokenBucket).optional(), todayTokensByModel: z.record(z.string(), z.union([z.coerce.number(), tokenBucket])).optional(),
+  id: z.string(), name: z.string().optional(), todayTotalTokens: safeNumber.optional(),
+  todayPrompts: safeNumber.optional(), todaySessions: safeNumber.optional(),
+  totalPrompts: safeNumber.optional(), totalSessions: safeNumber.optional(), activeDays: safeNumber.optional(),
+  recentDays: z.array(z.object({ date: z.string(), messageCount: safeNumber.default(0) }).passthrough()).optional(),
+  modelUsage: z.record(z.string(), tokenBucket).optional(), todayTokensByModel: z.record(z.string(), z.union([safeNumber, tokenBucket])).optional(),
   hasPromptStats: z.boolean().optional(), updatedAt: z.string().optional(),
   limits: z.array(LimitWindowRecord).optional(), balance: BalanceRecord.optional(),
   tierLabel: z.string().optional(), ready: z.boolean().optional(), scope: z.string().optional(),

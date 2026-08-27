@@ -32,12 +32,31 @@ export function persist(session: Session, events: Event[]) {
   })();
 }
 
+// A concurrent writer (CLI index, another watcher pass) can hold the write
+// lock past busy_timeout; retry before giving up so one busy moment does not
+// leave a provider's usage record stale for a full refresh cycle.
+function upsertUsageRecord(record: UsageRecord, now: string): UsageRecord | null {
+  const statement = db.query("INSERT INTO usage_records VALUES (?,?,?) ON CONFLICT(provider) DO UPDATE SET record_json=excluded.record_json,updated_at=excluded.updated_at");
+  let lastError: unknown = null;
+  for (const waitMs of [0, 500, 2500]) {
+    if (waitMs) Bun.sleepSync(waitMs);
+    try { statement.run(record.id, JSON.stringify(record), now); return record; }
+    catch (error) { lastError = error; }
+  }
+  db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run("usage_records", record.id, String(lastError), now);
+  return null;
+}
+
 function refreshUsage() {
   if (!existsSync(usageDir)) return;
   const observed: UsageRecord[] = [];
   for (const name of readdirSync(usageDir).filter(n => n.endsWith(".json"))) {
     const path = join(usageDir, name);
-    try { const record = UsageRecordV1.parse(JSON.parse(readFileSync(path, "utf8"))); db.query("INSERT INTO usage_records VALUES (?,?,?) ON CONFLICT(provider) DO UPDATE SET record_json=excluded.record_json,updated_at=excluded.updated_at").run(record.id, JSON.stringify(record), new Date().toISOString()); observed.push(record); }
+    try {
+      const record = UsageRecordV1.parse(JSON.parse(readFileSync(path, "utf8")));
+      const stored = upsertUsageRecord(record, new Date().toISOString());
+      if (stored) observed.push(stored);
+    }
     catch (error) { db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(path, name.slice(0, -5), String(error), new Date().toISOString()); }
   }
   // Every collector refresh feeds the limit watch: snapshots, forecasts,
@@ -155,11 +174,21 @@ PROVIDERS.find(p => p.id === "opencode")!.index = indexOpenCode;
 
 export function indexProgress() { return { ...progress }; }
 let watchers: FSWatcher[] = [], timer: Timer | undefined;
+// fs.watch on the usage dir has proven unreliable across collector write
+// patterns (renames, atomic replaces); a cheap mtime poll keeps the dashboard
+// within ~a minute of the collector instead of the 15-minute interval worst case.
+let lastUsageStamp = 0;
+function usageStamp() {
+  try {
+    return readdirSync(usageDir).filter(n => n.endsWith(".json")).reduce((max, n) => Math.max(max, Math.round(statSync(join(usageDir, n)).mtimeMs)), 0);
+  } catch { return 0; }
+}
 export function startWatching() {
   if (watchers.length) return;
   // opencode.db (+wal/shm) is rewritten continuously by live agents; reacting to
   // it triggers an endless re-index loop. Only session-file changes schedule a pass.
   const isDatabaseChurn = (file: string | null) => !file || /opencode\.db(-wal|-shm)?$/.test(file);
+  const schedule = () => { clearTimeout(timer); timer = setTimeout(() => void runIndex(), 15_000); };
   const roots = [
     ...PROVIDERS.flatMap(p => (p.roots ?? []).map(r => ({ ...r, provider: p.id }))),
     { provider: "usage", path: usageDir, kinds: [".json"] },
@@ -167,8 +196,15 @@ export function startWatching() {
   for (const root of roots) if (existsSync(root.path)) {
     try { watchers.push(watch(root.path, { recursive: true }, (_event, filename) => {
       if (root.provider === "opencode" && isDatabaseChurn(filename)) return;
-      clearTimeout(timer); timer = setTimeout(() => void runIndex(), 15_000);
-    })); } catch {}
+      schedule();
+    })); } catch (error) {
+      db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(root.path, "watch", String(error), new Date().toISOString());
+    }
   }
+  lastUsageStamp = usageStamp();
+  setInterval(() => {
+    const stamp = usageStamp();
+    if (stamp && stamp !== lastUsageStamp) { lastUsageStamp = stamp; schedule(); }
+  }, 60_000).unref();
   setInterval(() => void runIndex(), 15 * 60_000).unref();
 }

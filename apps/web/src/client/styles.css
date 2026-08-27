@@ -686,6 +686,12 @@ select {
   font-size: 12px;
   margin: 0 0 10px;
 }
+.brief > p.brief-meta {
+  margin: -6px 0 10px;
+  font: 10px "IBM Plex Mono";
+  line-height: 1.4;
+  color: var(--muted);
+}
 .brief > p {
   font-size: 13px;
   line-height: 1.6;

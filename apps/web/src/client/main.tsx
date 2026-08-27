@@ -807,6 +807,11 @@ function Analyst({ compact = false }: { compact?: boolean }) {
       </header>
       <div className="brief">
         <h3>Nightly brief</h3>
+        {report?.createdAt && (
+          <p className="brief-meta" title={new Date(report.createdAt).toISOString()}>
+            Generated {new Date(report.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} · rolling 7-day snapshot
+          </p>
+        )}
         <p>
           {report?.summary ??
             "Run the first analysis from Settings. Deterministic checks remain available without Ollama."}
