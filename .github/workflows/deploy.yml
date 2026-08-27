@@ -21,6 +21,9 @@ jobs:
       - name: Prepare environment
         run: |
           echo "$HOME/.local/share/mise/installs/bun/latest/bin" >> "$GITHUB_PATH"
+          # bash-invoked tooling (e.g. deploy-local.sh's turbo shim) needs real
+          # node; mise shims cover every mise-managed binary in one line.
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
           echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
       - name: Sync live working tree
         run: git -C "$REPO_DIR" pull --ff-only
