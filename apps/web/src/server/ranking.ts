@@ -1,4 +1,5 @@
 import type { UsageRecord } from "../shared/schemas";
+import { isIndexed } from "./providers";
 
 const n = (v: unknown) => Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0;
 export const bucketTotal = (b: any) => n(b?.inputTokens) + n(b?.outputTokens) + n(b?.cacheReadInputTokens) + n(b?.cacheCreationInputTokens);
@@ -9,7 +10,7 @@ export function rank(records: UsageRecord[], period: string) {
   const rows = records.flatMap(record => {
     let tokens = period === "today" ? n(record.todayTotalTokens) : period === "week" ? recentTotal(record) : allTotal(record);
     if (tokens <= 0) return [];
-    const transcriptCoverage = ["claude", "codex", "opencode"].includes(record.id) ? "indexed" : "metrics-only";
+    const transcriptCoverage = isIndexed(record.id) ? "indexed" : "metrics-only";
     return [{ providerId: record.id, providerName: record.name ?? record.id, tokens, recentDays: record.recentDays ?? [], updatedAt: record.updatedAt ?? "", coverage: transcriptCoverage }];
   }).sort((a, b) => b.tokens - a.tokens || a.providerName.localeCompare(b.providerName));
   const total = rows.reduce((s, r) => s + r.tokens, 0);

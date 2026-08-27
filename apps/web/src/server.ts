@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import type { Context, Next } from "hono";
 import { compress } from "hono/compress";
 import { randomUUID } from "node:crypto";
 import { db, json } from "./server/db";
-import { security, requireAdmin } from "./server/auth";
+import { security, requireAdmin, localHosts } from "./server/auth";
 import { rank } from "./server/ranking";
 import { runIndex, indexProgress, startWatching } from "./server/indexer";
+import { isIndexed } from "./server/providers";
 import { chatStream, modelHealth, runNightly } from "./server/analyst";
 import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/limits";
 import { alertsInbox, incidentsView } from "./server/watch";
@@ -73,7 +75,7 @@ app.get("/api/overview", c => {
     let previous = -1, rankNumber = 0;
     board = { total, rows: totals.map((row, index) => { if (Number(row.tokens) !== previous) rankNumber = index + 1; previous = Number(row.tokens); return { ...row, providerName: row.providerId, tokens: Number(row.tokens), rank: rankNumber, share: total ? Number(row.tokens) / total : 0, coverage: "indexed", updatedAt: new Date().toISOString() }; }) } as any;
   }
-  return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: ["claude", "codex", "opencode"].includes(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
+    return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: isIndexed(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
 });
 app.get("/limits/api/board", c => c.json(limitsBoard(indexProgress())));
 app.get("/limits/api/alerts", c => c.json(alertsInbox()));
@@ -148,15 +150,30 @@ app.post("/api/analysis/run", async c => c.json(await runNightly(), 202));
 app.post("/api/refresh", async c => { const child = Bun.spawn([`${process.env.HOME}/.local/bin/omarchy-agent-usage-update`, "--force"], { stdout: "ignore", stderr: "ignore" }); void child.exited.then(() => runIndex()); return c.json({ started: true }, 202); });
 app.post("/api/index/rebuild", c => { void runIndex({ rebuild: true }); return c.json({ started: true }, 202); });
 app.patch("/api/suggestions/:id", async c => { const body = await c.req.json(); if (!["open", "accepted", "dismissed"].includes(body?.status)) return c.json({ error: "status must be open, accepted, or dismissed" }, 400); const result = db.query("UPDATE suggestions SET status=? WHERE id=?").run(body.status, c.req.param("id")); return result.changes ? c.json({ id: c.req.param("id"), status: body.status }) : c.json({ error: "Suggestion not found" }, 404); });
-app.use("/assets/*", serveStatic({ root: "./dist" }));
-app.use("/provider-assets/*", serveStatic({ root: "./dist" }));
-app.use("/fonts/*", serveStatic({ root: "./dist" }));
-app.use("*", serveStatic({ root: "./dist" }));
+// The published API origin answers API routes only. The dashboard SPA and its
+// assets are served exclusively by the Cloudflare Worker in front of the
+// browser-facing hostname; they must never be served from the API domain.
+// Local-first: loopback still renders the SPA and assets for development.
+const serveDist = serveStatic({ root: "./dist" });
+const servePublic = serveStatic({ root: "./public" });
+const localOnly = async (c: Context, next: Next, handler: (c: Context, next: Next) => Response | Promise<Response | void>) => {
+  const host = (c.req.header("host") ?? "").split(":")[0].toLowerCase();
+  if (!localHosts.has(host)) return await next();
+  return await handler(c, next);
+};
+app.use("/assets/*", (c, n) => localOnly(c, n, serveDist));
+app.use("/provider-assets/*", (c, n) => localOnly(c, n, serveDist));
+app.use("/fonts/*", (c, n) => localOnly(c, n, serveDist));
 // Keep source-owned public files available before the first build completes.
 // This also makes the Bun test server deterministic when Turborepo runs the
 // web test and build tasks in parallel.
-app.use("*", serveStatic({ root: "./public" }));
-app.get("*", async c => { const file = Bun.file("./dist/index.html"); return file.size ? new Response(file, { headers: { "content-type": "text/html; charset=utf-8" } }) : c.text("Build the dashboard with `bun run build`.", 503); });
+app.use("*", (c, n) => localOnly(c, n, servePublic));
+app.get("*", async c => {
+  const host = (c.req.header("host") ?? "").split(":")[0].toLowerCase();
+  if (!localHosts.has(host)) return c.json({ error: "Not found" }, 404);
+  const file = Bun.file("./dist/index.html");
+  return file.size ? new Response(file, { headers: { "content-type": "text/html; charset=utf-8" } }) : c.text("Build the dashboard with `bun run build`.", 503);
+});
 
 if (import.meta.main) { void runIndex(); startWatching(); startProductivitySync(); const port = Number(process.env.PORT ?? 4317); Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch }); console.log(`Omarchy Agents listening on http://127.0.0.1:${port}`); }
 export default app;

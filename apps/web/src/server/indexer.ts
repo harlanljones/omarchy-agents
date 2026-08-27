@@ -1,21 +1,15 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch, type FSWatcher } from "node:fs";
-import { basename, dirname, extname, join, relative } from "node:path";
-import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { Database as SourceDatabase } from "bun:sqlite";
 import { db } from "./db";
 import { redact } from "./redact";
 import { observeUsageRecords, lastRecommendation, recordRecommendationChange } from "./watch";
 import { advise } from "./limits";
-import { LogEvent, NormalizedSession, UsageRecordV1, type Event, type Session, type UsageRecord } from "../shared/schemas";
+import { UsageRecordV1, LogEvent, NormalizedSession, type UsageRecord, type Event, type Session } from "../shared/schemas";
+import { PROVIDERS, parseJsonl, walk, tokenNumber, epochIso } from "./providers";
 
+export { parseJsonl };
 const home = process.env.HOME ?? "";
-const roots = [
-  { provider: "claude", path: `${home}/.claude/projects`, kinds: [".jsonl"] },
-  { provider: "codex", path: `${home}/.codex/sessions`, kinds: [".jsonl"] },
-  { provider: "cline", path: `${home}/.local/share/cline`, kinds: [".json", ".jsonl"] },
-  { provider: "antigravity", path: `${home}/.gemini/antigravity-cli`, kinds: [".json", ".jsonl"] },
-  { provider: "opencode", path: `${home}/.local/share/opencode`, kinds: [".json", ".jsonl"] }
-];
 const usageDir = process.env.AGENT_USAGE_DIR ?? `${home}/.local/state/omarchy/agents/usage`;
 const INDEXER_VERSION = "token-usage-v2";
 // Separate from INDEXER_VERSION: gates the opencode.db time_updated cursor
@@ -23,115 +17,6 @@ const INDEXER_VERSION = "token-usage-v2";
 const OPENCODE_CURSOR_VERSION = "opencode-cursor-v1";
 let active = false;
 let progress = { state: "idle", scanned: 0, indexed: 0, total: 0, current: "", startedAt: "", finishedAt: "", errors: 0 };
-
-const id = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 32);
-const iso = (value: unknown, fallback: string) => { const d = new Date(String(value ?? "")); return Number.isNaN(d.valueOf()) ? fallback : d.toISOString(); };
-const first = (...values: unknown[]) => values.find(v => typeof v === "string" && v.length) as string | undefined;
-const obj = (v: unknown): Record<string, any> => v && typeof v === "object" ? v as Record<string, any> : {};
-type TokenTotals = { input: number; output: number; cacheRead: number; cacheWrite: number };
-const tokenNumber = (value: unknown) => Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0;
-const tokenValue = (usage: Record<string, any>, keys: string[]) => {
-  for (const key of keys) if (usage[key] !== undefined && usage[key] !== null) return tokenNumber(usage[key]);
-  return 0;
-};
-const epochIso = (value: unknown, fallback: string) => {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) return fallback;
-  const milliseconds = Math.abs(numberValue) < 10_000_000_000 ? numberValue * 1000 : numberValue;
-  const date = new Date(milliseconds);
-  return Number.isNaN(date.valueOf()) ? fallback : date.toISOString();
-};
-const usageObject = (raw: any) => {
-  const message = obj(raw.message), payload = obj(raw.payload), data = obj(raw.data);
-  const candidates = [
-    raw.usage, message.usage, payload.usage, data.usage,
-    raw.token_usage, message.token_usage, payload.token_usage,
-    raw.tokens, message.tokens, payload.tokens,
-  ].map(obj);
-  return candidates.find((usage) => Object.keys(usage).some((key) => /token|usage|cache/i.test(key))) ?? null;
-};
-function usageTotals(raw: any): TokenTotals | null {
-  const usage = usageObject(raw);
-  if (!usage) return null;
-  const cacheCreation = usage.cache_creation && typeof usage.cache_creation === "object"
-    ? tokenNumber(usage.cache_creation.ephemeral_5m_input_tokens) + tokenNumber(usage.cache_creation.ephemeral_1h_input_tokens)
-    : 0;
-  const totals = {
-    input: tokenValue(usage, ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "prompt_token_count", "promptTokenCount"]),
-    output: tokenValue(usage, ["output_tokens", "outputTokens", "completion_tokens", "completionTokens", "completion_token_count", "completionTokenCount"]),
-    cacheRead: tokenValue(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cache_read_tokens", "cacheReadTokens"]),
-    cacheWrite: tokenValue(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_write_input_tokens", "cacheWriteInputTokens", "cache_creation_tokens", "cacheCreationTokens"]) || cacheCreation,
-  };
-  return totals.input || totals.output || totals.cacheRead || totals.cacheWrite ? totals : null;
-}
-function jsonlTokenTotals(raws: any[]): TokenTotals {
-  const snapshots = new Map<string, TokenTotals>();
-  raws.forEach((raw, index) => {
-    const totals = usageTotals(raw);
-    if (!totals) return;
-    const message = obj(raw.message), payload = obj(raw.payload);
-    const key = String(message.id ?? payload.id ?? raw.id ?? `line:${index}`);
-    const previous = snapshots.get(key);
-    snapshots.set(key, previous ? {
-      input: Math.max(previous.input, totals.input),
-      output: Math.max(previous.output, totals.output),
-      cacheRead: Math.max(previous.cacheRead, totals.cacheRead),
-      cacheWrite: Math.max(previous.cacheWrite, totals.cacheWrite),
-    } : totals);
-  });
-  return [...snapshots.values()].reduce((sum, totals) => ({
-    input: sum.input + totals.input,
-    output: sum.output + totals.output,
-    cacheRead: sum.cacheRead + totals.cacheRead,
-    cacheWrite: sum.cacheWrite + totals.cacheWrite,
-  }), { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
-}
-
-function walk(root: string, extensions: string[], out: string[], limit = 100_000) {
-  if (!existsSync(root) || out.length >= limit) return;
-  let entries; try { entries = readdirSync(root, { withFileTypes: true }); } catch { return; }
-  for (const entry of entries) {
-    if (out.length >= limit) break;
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) walk(path, extensions, out, limit);
-    else if (extensions.includes(extname(entry.name))) out.push(path);
-  }
-}
-
-function eventFrom(raw: any, sessionId: string, ordinal: number, path: string, fallbackTime: string): Event | null {
-  const payload = obj(raw.message ?? raw.payload ?? raw.data ?? raw);
-  const role = first(raw.role, payload.role, raw.type, payload.type) ?? "unknown";
-  const kind = role.includes("tool_result") || role === "toolResult" ? "tool_result"
-    : role.includes("tool") || payload.tool_use ? "tool_call"
-    : role.includes("error") ? "error" : role === "user" || role.includes("prompt") ? "prompt"
-    : role === "assistant" || role.includes("response") ? "response" : role === "system" ? "system" : "unknown";
-  const content = payload.content ?? raw.content ?? payload.text ?? raw.text ?? payload.message ?? raw.message;
-  let text = "";
-  if (typeof content === "string") text = content;
-  else if (Array.isArray(content)) text = content.map(p => typeof p === "string" ? p : first(p?.text, p?.content) ?? JSON.stringify(p)).join("\n");
-  else if (content && typeof content === "object") text = JSON.stringify(content);
-  if (!text || /"(?:image|audio|binary)"\s*:/i.test(text) && text.length > 200_000) return null;
-  const eventId = id(`${sessionId}:${ordinal}`);
-  return LogEvent.parse({ id: eventId, sessionId, ordinal, kind, timestamp: iso(raw.timestamp ?? payload.timestamp ?? raw.created_at, fallbackTime), text: redact(text), toolName: first(raw.tool_name, raw.name, payload.name) ?? null, sourceLocator: `${path}:${ordinal + 1}`, metadata: {} });
-}
-
-export function parseJsonl(provider: string, path: string, content: string): { session: Session; events: Event[] } {
-  const fallbackTime = statSync(path).mtime.toISOString();
-  const lines = content.split(/\r?\n/).filter(Boolean);
-  const raws: any[] = [];
-  for (const line of lines) { try { raws.push(JSON.parse(line)); } catch { /* diagnostic handled by caller */ } }
-  const meta = raws.map(obj).find(r => r.session_id || r.sessionId || r.cwd || r.model) ?? {};
-  const sourceKey = `${provider}:${path}`;
-  const sessionId = String(meta.session_id ?? meta.sessionId ?? meta.conversation_id ?? id(sourceKey));
-  const tokenTotals = jsonlTokenTotals(raws);
-  const events = raws.map((r, i) => eventFrom(r, sessionId, i, path, fallbackTime)).filter(Boolean) as Event[];
-  const startedAt = events[0]?.timestamp ?? fallbackTime;
-  const endedAt = events.at(-1)?.timestamp ?? startedAt;
-  const models = raws.map(r => first(r.model, r?.message?.model, r?.payload?.model)).filter(Boolean);
-  const project = first(meta.cwd, meta.project, dirname(path).split("/").at(-1));
-  const session = NormalizedSession.parse({ id: sessionId, provider, model: models.at(-1) ?? null, project: project ?? null, title: events.find(e => e.kind === "prompt")?.text.slice(0, 120) ?? basename(path), startedAt, endedAt, sourcePath: path, sourceKey, tokenInput: tokenTotals.input, tokenOutput: tokenTotals.output, cacheRead: tokenTotals.cacheRead, cacheWrite: tokenTotals.cacheWrite, errorCount: events.filter(e => e.kind === "error").length, toolCount: events.filter(e => e.kind === "tool_call").length, metadata: { format: "jsonl", parseableLines: raws.length, totalLines: lines.length } });
-  return { session, events };
-}
 
 export function persist(session: Session, events: Event[]) {
   db.transaction(() => {
@@ -223,18 +108,35 @@ export async function runIndex(options: { rebuild?: boolean } = {}) {
   try {
     if (options.rebuild) db.transaction(() => { db.run("DELETE FROM events_fts"); db.run("DELETE FROM events"); db.run("DELETE FROM sessions"); db.run("DELETE FROM checkpoints"); })();
     refreshUsage();
-    try { indexOpenCode(); } catch (error) { progress.errors++; db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(`${home}/.local/share/opencode/opencode.db`, "opencode", String(error), new Date().toISOString()); }
+    // Cursor-based / non-file providers (e.g. OpenCode's sqlite store) index
+    // themselves through their declared `index` function.
+    for (const provider of PROVIDERS) {
+      if (!provider.index) continue;
+      try { provider.index(); }
+      catch (error) { progress.errors++; db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run("", provider.id, String(error), new Date().toISOString()); }
+    }
+    // File-based providers: walk each declared root and dispatch through its parser.
     const files: Array<{ provider: string; path: string }> = [];
-    for (const root of roots) { const found: string[] = []; walk(root.path, root.kinds, found); files.push(...found.map(path => ({ provider: root.provider, path }))); }
+    for (const provider of PROVIDERS) {
+      if (!provider.roots || !provider.parse) continue;
+      for (const root of provider.roots) {
+        const found: string[] = [];
+        walk(root.path, root.kinds, found);
+        files.push(...found.filter(f => !root.match || root.match(f)).map(path => ({ provider: provider.id, path })));
+      }
+    }
     progress.total = files.length; progress.state = "indexing";
     const seen = new Set<string>();
     for (const file of files) {
       progress.scanned++; progress.current = file.path; seen.add(file.path);
+      const provider = PROVIDERS.find(p => p.id === file.provider)!;
       try {
         const stat = statSync(file.path); const checkpoint = db.query("SELECT size,mtime_ms,status FROM checkpoints WHERE source_path=?").get(file.path) as any;
         if (!options.rebuild && checkpoint?.size === stat.size && checkpoint?.mtime_ms === Math.round(stat.mtimeMs) && checkpoint?.status === INDEXER_VERSION) continue;
-        if (extname(file.path) !== ".jsonl" || stat.size > 50_000_000) continue;
-        const parsed = parseJsonl(file.provider, file.path, readFileSync(file.path, "utf8")); persist(parsed.session, parsed.events);
+        if (stat.size > 50_000_000) continue;
+        const parsed = provider.parse!(file.provider, file.path, readFileSync(file.path, "utf8"));
+        if (!parsed) continue;
+        persist(parsed.session, parsed.events);
         db.query("INSERT INTO checkpoints VALUES (?,?,?,?,?,?,NULL) ON CONFLICT(source_path) DO UPDATE SET size=excluded.size,mtime_ms=excluded.mtime_ms,indexed_at=excluded.indexed_at,status=excluded.status,error=NULL").run(file.path, file.provider, stat.size, Math.round(stat.mtimeMs), new Date().toISOString(), INDEXER_VERSION);
         progress.indexed++;
       } catch (error) { progress.errors++; db.query("INSERT INTO diagnostics(source_path,provider,message,created_at) VALUES (?,?,?,?)").run(file.path, file.provider, String(error), new Date().toISOString()); }
@@ -247,6 +149,10 @@ export async function runIndex(options: { rebuild?: boolean } = {}) {
   return progress;
 }
 
+// OpenCode is indexed from its sqlite store, not by walking files, so it is
+// wired into the registry here rather than declared inline in providers.ts.
+PROVIDERS.find(p => p.id === "opencode")!.index = indexOpenCode;
+
 export function indexProgress() { return { ...progress }; }
 let watchers: FSWatcher[] = [], timer: Timer | undefined;
 export function startWatching() {
@@ -254,7 +160,11 @@ export function startWatching() {
   // opencode.db (+wal/shm) is rewritten continuously by live agents; reacting to
   // it triggers an endless re-index loop. Only session-file changes schedule a pass.
   const isDatabaseChurn = (file: string | null) => !file || /opencode\.db(-wal|-shm)?$/.test(file);
-  for (const root of [...roots, { provider: "usage", path: usageDir, kinds: [".json"] }]) if (existsSync(root.path)) {
+  const roots = [
+    ...PROVIDERS.flatMap(p => (p.roots ?? []).map(r => ({ ...r, provider: p.id }))),
+    { provider: "usage", path: usageDir, kinds: [".json"] },
+  ];
+  for (const root of roots) if (existsSync(root.path)) {
     try { watchers.push(watch(root.path, { recursive: true }, (_event, filename) => {
       if (root.provider === "opencode" && isDatabaseChurn(filename)) return;
       clearTimeout(timer); timer = setTimeout(() => void runIndex(), 15_000);

@@ -8,14 +8,18 @@ interface Env {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === "/limits" || url.pathname.startsWith("/limits/"))
-      return Response.redirect(new URL("/limits", env.API_ORIGIN), 302);
-    if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
+    // The dashboard — including the admin /limits portal page — is served here;
+    // the API domain never serves the web app. Only API routes are forwarded to
+    // the API origin. /api/* uses the Worker's service token; the portal's
+    // /limits/api/* carries the visitor's own Access token so the portal stays
+    // admin-gated (it fails closed if the dashboard host is not behind Access).
+    const isApiProxy = url.pathname.startsWith("/api/") || url.pathname.startsWith("/limits/api/");
+    if (!isApiProxy) return env.ASSETS.fetch(request);
 
     const origin = new URL(env.API_ORIGIN);
     const target = new URL(url.pathname + url.search, origin);
     const headers = new Headers(request.headers);
-    if (env.ACCESS_CLIENT_ID && env.ACCESS_CLIENT_SECRET) {
+    if (url.pathname.startsWith("/api/") && env.ACCESS_CLIENT_ID && env.ACCESS_CLIENT_SECRET) {
       headers.set("CF-Access-Client-Id", env.ACCESS_CLIENT_ID);
       headers.set("CF-Access-Client-Secret", env.ACCESS_CLIENT_SECRET);
     }

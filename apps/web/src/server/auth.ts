@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyResult } from "jose";
 import type { Context, Next } from "hono";
 
-const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+export const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 const env = (key: string) => (process.env[key] ?? "").trim();
 const lower = (value: string) => value.toLowerCase();

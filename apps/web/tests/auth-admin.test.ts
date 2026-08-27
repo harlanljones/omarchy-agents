@@ -62,12 +62,12 @@ describe("limits portal boundary", () => {
   test("rejects a valid token for a different email", async () =>
     expect((await get("/limits/api/board", "127.0.0.1", await signToken("aud-admin-a", "intruder@example.com"))).status).toBe(403));
 
-  test("blocks service identities from the portal on any host", async () => {
+  test("blocks non-proxy service identities from the portal on any host", async () => {
     setEnv("API_HOSTNAME", "api.example.com");
     setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
     setEnv("ACCESS_CLIENT_ID", "svc.client");
     try {
-      const serviceToken = await signToken("aud-admin-a", "admin@example.com", { common_name: "svc.client" });
+      const serviceToken = await signToken("aud-admin-a", "admin@example.com", { common_name: "rogue.service" });
       const response = await get("/limits/api/board", "api.example.com", serviceToken);
       expect(response.status).toBe(403);
       const loopbackResponse = await get("/limits/api/board", "127.0.0.1", serviceToken);
@@ -89,14 +89,14 @@ describe("limits portal boundary", () => {
     }
   });
 
-  test("serves portal assets to the admin session on the service origin", async () => {
+  test("the API origin is API-only and serves no web assets", async () => {
     setEnv("API_HOSTNAME", "api.example.com");
     setEnv("CLOUDFLARE_ACCESS_API_AUD", "aud-api");
     setEnv("ACCESS_CLIENT_ID", "svc.client");
     try {
-      const response = await get("/favicon.svg", "api.example.com", await signToken("aud-admin-a"));
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain("image/svg+xml");
+      const serviceToken = await signToken("aud-api", "admin@example.com", { common_name: "svc.client" });
+      const response = await get("/favicon.svg", "api.example.com", serviceToken);
+      expect(response.status).not.toBe(200);
     } finally {
       for (const key of ["API_HOSTNAME", "CLOUDFLARE_ACCESS_API_AUD", "ACCESS_CLIENT_ID"]) delete process.env[key];
     }

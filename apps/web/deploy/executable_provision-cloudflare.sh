@@ -6,6 +6,7 @@ set -euo pipefail
 : "${CLOUDFLARE_ZONE_ID:?Set your Cloudflare zone ID}"
 : "${DASHBOARD_HOSTNAME:?Set the tunnel hostname, e.g. agents-api.example.com — the Access-protected origin the Worker proxies to}"
 : "${ACCESS_EMAIL:?Set the email allowed through Cloudflare Access}"
+: "${WORKER_HOSTNAME:=}"
 
 api="https://api.cloudflare.com/client/v4"
 auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
@@ -43,6 +44,17 @@ dns_body=$(jq -nc --arg name "$host" --arg content "$tunnel_id.cfargotunnel.com"
 if [[ -n $dns_id ]]; then request -X PUT "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records/$dns_id" --data "$dns_body" >/dev/null
 else request -X POST "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records" --data "$dns_body" >/dev/null; fi
 
+worker_script="omarchy-agents"
+if [[ -n $WORKER_HOSTNAME && $WORKER_HOSTNAME != "$host" ]]; then
+  subdomain=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" | jq -r '.result.subdomain')
+  worker_target="$worker_script.$subdomain.workers.dev"
+  wdns_id=$(request "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=CNAME&name=$WORKER_HOSTNAME" | jq -r '.result[0].id // empty')
+  wdns_body=$(jq -nc --arg name "$WORKER_HOSTNAME" --arg content "$worker_target" '{type:"CNAME",name:$name,content:$content,proxied:true}')
+  if [[ -n $wdns_id ]]; then request -X PUT "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records/$wdns_id" --data "$wdns_body" >/dev/null
+  else request -X POST "$api/zones/$CLOUDFLARE_ZONE_ID/dns_records" --data "$wdns_body" >/dev/null; fi
+  printf 'Ensured proxied DNS %s -> %s (Worker).\n' "$WORKER_HOSTNAME" "$worker_target"
+fi
+
 otp_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/identity_providers" | jq -r '.result[] | select(.type=="onetimepin") | .id' | head -1)
 if [[ -z $otp_id ]]; then otp_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/identity_providers" --data '{"name":"One-time PIN login","type":"onetimepin","config":{}}' | jq -er '.result.id'); fi
 
@@ -64,8 +76,16 @@ else
   fi
 fi
 
-app_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg host "$host" '.result[] | select(.domain==$host) | .id' | head -1)
-app_body=$(jq -nc --arg domain "$host" --arg idp "$otp_id" '{name:"Omarchy Agents",domain:$domain,type:"self_hosted",session_duration:"24h",auto_redirect_to_identity:true,allowed_idps:[$idp]}')
+primary="$host"
+destinations=$(jq -nc --arg h "$host" '[{type:"public",uri:$h}]')
+if [[ -n $WORKER_HOSTNAME && $WORKER_HOSTNAME != "$host" ]]; then
+  primary="$WORKER_HOSTNAME"
+  destinations=$(jq -nc --arg p "$WORKER_HOSTNAME" --arg h "$host" '[{type:"public",uri:$p},{type:"public",uri:$h}]')
+fi
+
+app_name="Omarchy Agents"
+app_id=$(request "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" | jq -r --arg name "$app_name" '.result[] | select(.name==$name) | .id' | head -1)
+app_body=$(jq -nc --arg name "$app_name" --arg domain "$primary" --arg idp "$otp_id" --argjson destinations "$destinations" '{name:$name,domain:$domain,type:"self_hosted",session_duration:"24h",auto_redirect_to_identity:true,allowed_idps:[$idp],destinations:$destinations}')
 if [[ -n $app_id ]]; then request -X PUT "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps/$app_id" --data "$app_body" >/dev/null
 else app_id=$(request -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" --data "$app_body" | jq -er '.result.id'); fi
 
@@ -118,9 +138,9 @@ upsert_env() {
 upsert_env API_HOSTNAME "$host"
 upsert_env CLOUDFLARE_ACCESS_API_AUD "$aud"
 upsert_env ACCESS_CLIENT_ID "$svc_client_id"
-printf 'Provisioned %s via tunnel %s with one Access application covering the host, the portal audience, and the worker service policy.\n' "$host" "$tunnel_id"
+printf 'Provisioned tunnel %s and one Access application covering the API origin %s%s.\n' "$tunnel_id" "$host" "${WORKER_HOSTNAME:+ and the dashboard $WORKER_HOSTNAME}"
 printf 'Next:\n'
 printf '  1. cd apps/web && bunx wrangler secret put ACCESS_CLIENT_ID      # %s\n' "$svc_client_id"
 printf '  2. bunx wrangler secret put ACCESS_CLIENT_SECRET                 # the secret saved above\n'
-printf '  3. Set DASHBOARD_HOSTNAME=<browser-facing hostname> in %s/dashboard.env if it differs from %s; the portal lives at %s/limits\n' "$config_dir" "$host" "$host"
+printf '  3. Deploy the Worker so its dashboard hostname resolves: cd apps/web && bunx wrangler deploy. This script already attached %s to the same Access application and created its proxied DNS (CNAME -> the Worker) because WORKER_HOSTNAME was set; until the Worker is deployed and behind Access the portal fails closed (401). Set DASHBOARD_HOSTNAME=<browser-facing hostname> in %s/dashboard.env if it differs from %s.\n' "${WORKER_HOSTNAME:-<dashboard hostname>}" "$config_dir" "$host"
 printf '  4. systemctl --user enable --now omarchy-agents-tunnel.service && systemctl --user restart omarchy-agents-dashboard.service\n'

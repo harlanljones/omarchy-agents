@@ -1,4 +1,5 @@
 import { db, json } from "./db";
+import { isIndexed } from "./providers";
 import { classifyWindow, deriveStatus, formatDuration } from "./watch";
 import { UsageRecordV1, type AdviceResponse, type AdviceRow, type AdviceVerdict, type LimitKind, type LimitWindowView, type LimitsBoard, type PlatformLimits, type TaskProfile, type UsageRecord } from "../shared/schemas";
 import { dominantModel, estimateCostUsd, ratesForModel, type TokenMix } from "./pricing";
@@ -39,7 +40,7 @@ export function buildPlatformLimits(record: UsageRecord, now = Date.now()): Plat
     binding,
     balance,
     updatedAt: record.updatedAt ?? null,
-    coverage: ["claude", "codex", "opencode"].includes(record.id) ? "indexed" : "metrics-only",
+    coverage: isIndexed(record.id) ? "indexed" : "metrics-only",
   };
 }
 
