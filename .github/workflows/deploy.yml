@@ -17,6 +17,10 @@ jobs:
     timeout-minutes: 20
     env:
       REPO_DIR: /home/harlan/dev/omarchy-agents
+      # omarchy-shell shell rescanPlugins (final deploy step) refuses to run
+      # without it; the runner's systemd environment does not inherit the
+      # interactive shell's value.
+      OMARCHY_PATH: /usr/share/omarchy
     steps:
       - name: Prepare environment
         run: |
