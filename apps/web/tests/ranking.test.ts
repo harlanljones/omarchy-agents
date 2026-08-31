@@ -17,4 +17,20 @@ describe("desktop-compatible ranking", () => {
     const fireworks = rank([{ id: "fireworks", name: "Fireworks", todayTotalTokens: 50, recentDays: [{ date: "2026-08-22", messageCount: 50 }] }], "today").rows[0];
     expect(fireworks.coverage).toBe("metrics-only");
   });
+  test("computes estimated spending per row and total spending", () => {
+    const pricedRecords = [
+      {
+        id: "claude",
+        name: "Claude",
+        todayTotalTokens: 1_000_000,
+        recentDays: [{ date: "2026-08-22", messageCount: 1_000_000 }],
+        modelUsage: {
+          "claude-sonnet-4": { inputTokens: 800_000, outputTokens: 200_000, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }
+        }
+      }
+    ];
+    const res = rank(pricedRecords, "all");
+    expect(res.rows[0].estCostUsd).toBeCloseTo((800_000 * 3 + 200_000 * 15) / 1e6);
+    expect(res.totalCostUsd).toBeCloseTo((800_000 * 3 + 200_000 * 15) / 1e6);
+  });
 });

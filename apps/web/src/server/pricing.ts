@@ -89,7 +89,97 @@ export function dominantModel(record: { modelUsage?: Record<string, any>; todayT
 }
 
 export function estimateCostUsd(rates: Rates, mix: TokenMix) {
-  return (mix.input * rates.inputPerMtok + mix.output * rates.outputPerMtok + mix.cacheRead * rates.cacheReadPerMtok) / 1e6;
+  return (mix.input * rates.inputPerMtok + mix.output * rates.outputPerMtok + mix.cacheRead * rates.cacheReadPerMtok + ((mix as any).cacheWrite ?? 0) * rates.cacheWritePerMtok) / 1e6;
+}
+
+export function bucketCost(model: string, bucket: any): number {
+  if (!bucket || typeof bucket !== "object") return 0;
+  const rates = ratesForModel(model);
+  if (!rates?.rates) return 0;
+  const r = rates.rates;
+  const input = Number(bucket.inputTokens ?? 0);
+  const output = Number(bucket.outputTokens ?? 0);
+  const cacheRead = Number(bucket.cacheReadInputTokens ?? 0);
+  const cacheWrite = Number(bucket.cacheCreationInputTokens ?? 0);
+  return (input * r.inputPerMtok + output * r.outputPerMtok + cacheRead * r.cacheReadPerMtok + cacheWrite * r.cacheWritePerMtok) / 1e6;
+}
+
+export function estimateTokensCost(model: string, tokens: number): number {
+  const n = Number(tokens ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const rates = ratesForModel(model);
+  if (!rates?.rates) return 0;
+  const blended = rates.rates.inputPerMtok * 0.75 + rates.rates.outputPerMtok * 0.25;
+  return (n * blended) / 1e6;
+}
+
+export function allTimeRecordCost(record: any): number {
+  const usage = record?.modelUsage ?? {};
+  let totalCost = 0;
+  let modelTokensSum = 0;
+  for (const [modelId, bucket] of Object.entries(usage)) {
+    totalCost += bucketCost(modelId, bucket);
+    modelTokensSum += Number((bucket as any)?.inputTokens ?? 0) + Number((bucket as any)?.outputTokens ?? 0) + Number((bucket as any)?.cacheReadInputTokens ?? 0) + Number((bucket as any)?.cacheCreationInputTokens ?? 0);
+  }
+  const allTokens = Math.max(modelTokensSum, (record?.recentDays ?? []).reduce((s: number, d: any) => s + Number(d?.messageCount ?? 0), 0), Number(record?.todayTotalTokens ?? 0));
+  if (modelTokensSum > 0 && allTokens > modelTokensSum) {
+    totalCost = (totalCost / modelTokensSum) * allTokens;
+  } else if (modelTokensSum === 0 && allTokens > 0) {
+    const dom = dominantModel(record);
+    if (dom) totalCost = estimateTokensCost(dom, allTokens);
+  }
+  return totalCost;
+}
+
+export function todayRecordCost(record: any): number {
+  const todayByModel = record?.todayTokensByModel ?? {};
+  const entries = Object.entries(todayByModel);
+  if (entries.length > 0) {
+    let cost = 0;
+    for (const [modelId, val] of entries) {
+      if (val && typeof val === "object") {
+        cost += bucketCost(modelId, val);
+      } else {
+        const t = Number(val ?? 0);
+        if (t <= 0) continue;
+        const histBucket = record?.modelUsage?.[modelId];
+        const histTokens = histBucket ? Number(histBucket.inputTokens ?? 0) + Number(histBucket.outputTokens ?? 0) + Number(histBucket.cacheReadInputTokens ?? 0) + Number(histBucket.cacheCreationInputTokens ?? 0) : 0;
+        if (histTokens > 0) {
+          const histCost = bucketCost(modelId, histBucket);
+          cost += (histCost / histTokens) * t;
+        } else {
+          cost += estimateTokensCost(modelId, t);
+        }
+      }
+    }
+    return cost;
+  }
+  const todayTokens = Number(record?.todayTotalTokens ?? 0);
+  if (todayTokens <= 0) return 0;
+  const allCost = allTimeRecordCost(record);
+  const allTokens = Math.max(1, Number(record?.todayTotalTokens ?? 0), (record?.recentDays ?? []).reduce((s: number, d: any) => s + Number(d?.messageCount ?? 0), 0));
+  if (allCost > 0 && allTokens > 0) {
+    return (allCost / allTokens) * todayTokens;
+  }
+  const dom = dominantModel(record);
+  if (dom) return estimateTokensCost(dom, todayTokens);
+  return 0;
+}
+
+export function estimateRecordCost(record: any, period: string): number {
+  if (!record) return 0;
+  if (period === "today") return todayRecordCost(record);
+  if (period === "all") return allTimeRecordCost(record);
+  const weekTokens = (record?.recentDays ?? []).reduce((s: number, d: any) => s + Number(d?.messageCount ?? 0), 0);
+  if (weekTokens <= 0) return 0;
+  const allCost = allTimeRecordCost(record);
+  const allTokens = Math.max(weekTokens, Number(record?.todayTotalTokens ?? 0), Object.values(record?.modelUsage ?? {}).reduce((sum: number, b: any) => sum + Number((b as any)?.inputTokens ?? 0) + Number((b as any)?.outputTokens ?? 0) + Number((b as any)?.cacheReadInputTokens ?? 0) + Number((b as any)?.cacheCreationInputTokens ?? 0), 0));
+  if (allCost > 0 && allTokens > 0) {
+    return (allCost / allTokens) * weekTokens;
+  }
+  const dom = dominantModel(record);
+  if (dom) return estimateTokensCost(dom, weekTokens);
+  return 0;
 }
 
 export function effectivePricingTable(): PricingEntry[] {

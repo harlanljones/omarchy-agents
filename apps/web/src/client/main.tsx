@@ -5,16 +5,19 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { AdviceRow, AdviceVerdict, AlertsResponse, IncidentsResponse, LimitsBoard, LimitWindowView, PricingEntry, ProductivityActivityResponse, ProductivityResponse } from "../shared/schemas";
 import "./styles.css";
 import { colors, fmt } from "./theme";
+import { Flask } from "@phosphor-icons/react";
+import { Experiments } from "./experiments";
 
 const HistoryChart = lazy(() =>
   import("./chart").then((m) => ({ default: m.HistoryChart })),
 );
 
-type Nav = "overview" | "logs" | "analyst" | "settings" | "limits";
+type Nav = "overview" | "logs" | "analyst" | "experiments" | "settings" | "limits";
 const navPaths: Record<Nav, string> = {
   overview: "/overview",
   logs: "/logs",
   analyst: "/analyst",
+  experiments: "/experiments",
   settings: "/settings",
   limits: "/limits",
 };
@@ -25,10 +28,17 @@ type BoardRow = {
   providerId: string;
   providerName: string;
   tokens: number;
+  estCostUsd?: number;
   rank: number;
   share: number;
   coverage: string;
   updatedAt: string;
+};
+const formatUsd = (val?: number | null) => {
+  if (val == null || !Number.isFinite(val) || val <= 0) return "—";
+  if (val < 0.01) return "<$0.01";
+  if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
+  return `$${val.toFixed(2)}`;
 };
 type HistorySeries = {
   rows: any[];
@@ -90,7 +100,8 @@ function Status({
   );
 }
 function NavIcon({ id }: { id: Nav }) {
-  const paths: Record<Nav, React.ReactNode> = {
+  if (id === "experiments") return <Flask aria-hidden="true" weight="regular" />;
+  const paths: Record<Exclude<Nav, "experiments">, React.ReactNode> = {
     overview: (
       <>
         <path d="M4 5h16v4H4z" />
@@ -169,6 +180,7 @@ function StandingsSkeleton() {
             <Sk w={104 - i * 6} h={11} />
           </th>
           <td className="tokens"><Sk w={52 - i * 4} /></td>
+          <td className="spend"><Sk w={40} /></td>
           <td><i className="sk sk-pill" /></td>
           <td className="share"><i className="sk-fill" style={{ width: `${share}%` }} /></td>
         </tr>
@@ -379,7 +391,7 @@ function Overview({
               )
               : loadingBoard
                 ? "Updating standings…"
-                : `${fmt.format(board.total)} tokens across ${board.rows.length} active providers`}
+                : `${fmt.format(board.total)} tokens${board.totalCostUsd ? ` (~${formatUsd(board.totalCostUsd)})` : ""} across ${board.rows.length} active providers`}
           </p>
         </div>
         <div className="health">
@@ -453,6 +465,7 @@ function Overview({
               <th scope="col">Rank</th>
               <th scope="col">Provider</th>
               <th scope="col">Tokens</th>
+              <th scope="col">Est. Spend</th>
               <th scope="col">Coverage</th>
               <th scope="col">Share</th>
             </tr>
@@ -466,6 +479,7 @@ function Overview({
                   <b>{row.providerName}</b>
                 </th>
                 <td className="tokens">{fmt.format(row.tokens)}</td>
+                <td className="spend">{formatUsd(row.estCostUsd)}</td>
                 <td>
                   <Status tone={row.coverage === "indexed" ? "ok" : "warn"}>
                     {row.coverage}
@@ -488,7 +502,7 @@ function Overview({
             {loadingBoard && !board.rows.length && <StandingsSkeleton />}
             {!loadingBoard && !board.rows.length && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="empty">
                     <strong>No usage in this range</strong>
                     <span>
@@ -541,10 +555,13 @@ function Logs() {
       errors: false,
     });
   const parent = useRef<HTMLDivElement>(null);
+  const linkedSessionId = new URLSearchParams(window.location.search).get("session") ?? "";
+  const linkedEventId = new URLSearchParams(window.location.search).get("event") ?? "";
   const query = new URLSearchParams({
     ...filters,
     errors: String(filters.errors),
   } as any);
+  if (linkedSessionId) query.set("id", linkedSessionId);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -552,7 +569,8 @@ function Logs() {
     api<any>(`/api/sessions?${query}`, { signal: controller.signal })
       .then((result) => {
         setData(result);
-        setSelected((current: any) => result.rows.some((row: any) => row.id === current?.id) ? current : null);
+        if (linkedSessionId) setSelected(result.rows.find((row: any) => row.id === linkedSessionId) ?? null);
+        else setSelected((current: any) => result.rows.some((row: any) => row.id === current?.id) ? current : null);
       })
       .catch((reason) => {
         if (reason.name === "AbortError") return;
@@ -562,7 +580,7 @@ function Logs() {
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [filters.provider, filters.project, filters.errors, reload]);
+  }, [filters.provider, filters.project, filters.errors, linkedSessionId, reload]);
   useEffect(() => {
     const controller = new AbortController();
     setEvents([]);
@@ -576,6 +594,15 @@ function Logs() {
     } else setEventsLoading(false);
     return () => controller.abort();
   }, [selected, reload]);
+  useEffect(() => {
+    if (!linkedEventId || !events.some((event) => event.id === linkedEventId)) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`e-${linkedEventId}`);
+      target?.scrollIntoView({ block: "center" });
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [events, linkedEventId]);
   const virtual = useVirtualizer({
     count: data.rows.length,
     getScrollElement: () => parent.current,
@@ -667,6 +694,7 @@ function Logs() {
                   </small>
                   <em>
                     {s.toolCount} tools · {s.errorCount} errors
+                    {s.estCostUsd != null && s.estCostUsd > 0 ? ` · est. ${formatUsd(s.estCostUsd)}` : ""}
                   </em>
                 </button>
               );
@@ -691,7 +719,7 @@ function Logs() {
             )}
           </header>
           {events.map((e) => (
-            <article id={`e-${e.id}`} className={`event ${e.kind}`} key={e.id}>
+            <article id={`e-${e.id}`} className={`event ${e.kind}`} key={e.id} tabIndex={-1}>
               <div>
                 <span>{e.kind.replace("_", " ")}</span>
                 <time>{new Date(e.timestamp).toLocaleTimeString()}</time>
@@ -716,7 +744,10 @@ function Logs() {
   );
 }
 
-function Analyst({ compact = false }: { compact?: boolean }) {
+function Analyst({ compact = false, onOpenExperiment }: {
+  compact?: boolean;
+  onOpenExperiment?: (value: { id?: string | null; suggestionId?: string | null }) => void;
+}) {
   const [reports, setReports] = useState<any[]>([]),
     [input, setInput] = useState(""),
     [messages, setMessages] = useState<any[]>([]),
@@ -817,7 +848,7 @@ function Analyst({ compact = false }: { compact?: boolean }) {
             "Run the first analysis from Settings. Deterministic checks remain available without Ollama."}
         </p>
         {report?.detectors?.slice(0, 3).map((d: any) => (
-          <div className="finding" key={d.type}>
+          <div className="finding" key={d.key}>
             <Status tone={d.severity === "warning" ? "warn" : "ok"}>
               {d.type.replaceAll("_", " ")}
             </Status>
@@ -825,6 +856,12 @@ function Analyst({ compact = false }: { compact?: boolean }) {
           </div>
         ))}
       </div>
+      {!compact && report?.suggestions?.map((suggestion: any) => <article className="analyst-suggestion" key={suggestion.id}>
+        <div><strong>{suggestion.title}</strong><p>{suggestion.rationale}</p></div>
+        {suggestion.experiment ? <Button onClick={() => onOpenExperiment?.({
+          id: suggestion.experimentId, suggestionId: suggestion.experimentId ? null : suggestion.id,
+        })}>{suggestion.experimentId ? "Open experiment" : "Start experiment"}</Button> : <Status tone="warn">Finding only</Status>}
+      </article>)}
       {!compact && <section className="prompt-analysis" aria-live="polite">
         <header><div><h3>Prompt analysis</h3><p>Local advisory match: task complexity vs model</p></div>{promptAnalysis && <Status tone={promptAnalysis.complexity === "high" ? "warn" : "ok"}>{promptAnalysis.complexity} complexity · {promptAnalysis.score}/100</Status>}</header>
         <label className="analysis-session">Indexed session ID <input value={analysisSessionId} onChange={(e) => setAnalysisSessionId(e.target.value)} placeholder="Optional: analyze first prompt from a session" /></label>
@@ -2115,6 +2152,7 @@ function App() {
     { id: "overview", label: "Overview" },
     { id: "logs", label: "Logs" },
     { id: "analyst", label: "Analyst" },
+    { id: "experiments", label: "Experiments" },
     { id: "settings", label: "Settings" },
     { id: "limits", label: "Limits" },
   ];
@@ -2133,6 +2171,12 @@ function App() {
   const navigate = (next: Nav) => {
     if (next !== nav) window.history.pushState({}, "", navPaths[next]);
     setNav(next);
+    setRail(false);
+  };
+  const openExperiment = (value: { id?: string | null; suggestionId?: string | null }) => {
+    const search = value.id ? `?id=${encodeURIComponent(value.id)}` : value.suggestionId ? `?suggestion=${encodeURIComponent(value.suggestionId)}` : "";
+    window.history.pushState({}, "", `/experiments${search}`);
+    setNav("experiments");
     setRail(false);
   };
   const openRail = () => {
@@ -2168,8 +2212,9 @@ function App() {
         "1": "overview",
         "2": "logs",
         "3": "analyst",
-        "4": "settings",
-        "5": "limits",
+        "4": "experiments",
+        "5": "settings",
+        "6": "limits",
       };
       if (map[event.key]) {
         event.preventDefault();
@@ -2206,9 +2251,10 @@ function App() {
     }
   };
   const railHidden = compactLayout ? !rail : railCollapsed;
+  const ownsFullWidth = nav === "analyst" || nav === "experiments";
   return (
     <div
-      className={`shell ${nav === "analyst" || railCollapsed ? "without-rail" : ""} ${nav === "limits" ? "limits-shell" : ""}`}
+      className={`shell ${ownsFullWidth || railCollapsed ? "without-rail" : ""} ${nav === "limits" ? "limits-shell" : ""}`}
     >
       <a href="#main" className="skip">
         Skip to content
@@ -2250,7 +2296,7 @@ function App() {
           Omarchy console. STORY: compare, inspect, ask, decide. FIRST VIEWPORT:
           standings and advisory rail. FORM: ruled control room.
         </div>
-        {nav !== "analyst" && (nav !== "overview" || railCollapsed) && (
+        {!ownsFullWidth && (nav !== "overview" || railCollapsed) && (
           <button
             ref={railToggleRef}
             className={`rail-toggle rail-toggle-global ${railCollapsed ? "rail-toggle-collapsed" : ""}`}
@@ -2268,11 +2314,23 @@ function App() {
           />
         )}{" "}
         {nav === "logs" && <Logs />}
-        {nav === "analyst" && <Analyst />}
+        {nav === "analyst" && <Analyst onOpenExperiment={openExperiment} />}
+        {nav === "experiments" && (
+          <Experiments
+            request={api}
+            onOpenAnalyst={() => navigate("analyst")}
+            onOpenSession={(sessionId, eventId) => {
+              const params = new URLSearchParams({ session: sessionId });
+              if (eventId) params.set("event", eventId);
+              window.history.pushState({}, "", `/logs?${params}`);
+              setNav("logs");
+            }}
+          />
+        )}
         {nav === "settings" && <Settings />}
         {nav === "limits" && <Limits />}
       </main>
-      {nav !== "analyst" && (
+      {!ownsFullWidth && (
         <aside
           id="analyst-rail"
           ref={railRef}

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { redact } from "./redact";
@@ -53,10 +53,10 @@ function usageTotals(raw: any): TokenTotals | null {
     ? tokenNumber(usage.cache_creation.ephemeral_5m_input_tokens) + tokenNumber(usage.cache_creation.ephemeral_1h_input_tokens)
     : 0;
   const totals = {
-    input: tokenValue(usage, ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "prompt_token_count", "promptTokenCount"]),
-    output: tokenValue(usage, ["output_tokens", "outputTokens", "completion_tokens", "completionTokens", "completion_token_count", "completionTokenCount"]),
-    cacheRead: tokenValue(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cache_read_tokens", "cacheReadTokens"]),
-    cacheWrite: tokenValue(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_write_input_tokens", "cacheWriteInputTokens", "cache_creation_tokens", "cacheCreationTokens"]) || cacheCreation,
+    input: tokenValue(usage, ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "prompt_token_count", "promptTokenCount", "input"]),
+    output: tokenValue(usage, ["output_tokens", "outputTokens", "completion_tokens", "completionTokens", "completion_token_count", "completionTokenCount", "output"]),
+    cacheRead: tokenValue(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cache_read_tokens", "cacheReadTokens", "cache_read"]),
+    cacheWrite: tokenValue(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_write_input_tokens", "cacheWriteInputTokens", "cache_creation_tokens", "cacheCreationTokens", "cache_write"]) || cacheCreation,
   };
   return totals.input || totals.output || totals.cacheRead || totals.cacheWrite ? totals : null;
 }
@@ -184,6 +184,69 @@ export function parseAntigravity(provider: string, path: string, content: string
   return buildSession(provider, mapped, { sessionId, project: null, path, sourceKey, fallbackTime, format: "antigravity-jsonl" });
 }
 
+// Evot writes one JSON array per turn. Each envelope carries an `item`; assistant
+// items can contain both prose and tool-call blocks, while session.json beside the
+// transcript is the authoritative source for project, model, and aggregate tokens.
+export function parseEvot(provider: string, path: string, content: string): { session: Session; events: Event[] } | null {
+  const fallbackTime = statSync(path).mtime.toISOString();
+  const envelopes: any[] = [];
+  for (const line of content.split(/\r?\n/).filter(Boolean)) {
+    try {
+      const batch = JSON.parse(line);
+      if (Array.isArray(batch)) envelopes.push(...batch);
+      else if (batch && typeof batch === "object") envelopes.push(batch);
+    } catch { /* skip malformed turn batches */ }
+  }
+  if (!envelopes.length) return null;
+
+  let metadata: Record<string, any> = {};
+  const metadataPath = join(dirname(path), "session.json");
+  try { metadata = obj(JSON.parse(readFileSync(metadataPath, "utf8"))); } catch { /* transcript remains indexable */ }
+  const sessionId = String(metadata.session_id ?? envelopes.find(row => row.session_id)?.session_id ?? id(`${provider}:${path}`));
+  const mapped: any[] = [];
+  for (const envelope of envelopes) {
+    const item = obj(envelope.item ?? envelope);
+    const timestamp = item.timestamp ?? envelope.timestamp ?? metadata.updated_at ?? metadata.created_at;
+    if (item.type === "user") {
+      mapped.push({ role: "user", content: item.text ?? item.content, timestamp });
+    } else if (item.type === "assistant") {
+      const blocks = Array.isArray(item.content) ? item.content : [{ type: "text", text: item.content ?? item.text }];
+      const textBlocks = blocks.filter((block: any) => block?.type === "text" && block.text);
+      if (textBlocks.length) mapped.push({ role: "assistant", content: textBlocks, timestamp, model: item.model, usage: item.usage });
+      for (const block of blocks.filter((candidate: any) => candidate?.type === "tool_call")) {
+        mapped.push({ role: "tool", content: block.input ?? {}, name: block.name, timestamp });
+      }
+    } else if (item.type === "tool_result") {
+      mapped.push({ role: "tool_result", content: item.content, name: item.tool_name, timestamp });
+    }
+  }
+  if (!mapped.length) return null;
+
+  const base = buildSession(provider, mapped, {
+    sessionId,
+    project: first(metadata.cwd, metadata.project) ?? null,
+    path,
+    sourceKey: `${provider}:${path}`,
+    fallbackTime,
+    format: "evot-jsonl",
+    extraMeta: {
+      evotProvider: metadata.provider ?? null,
+      contextTokens: tokenNumber(metadata.context_tokens),
+      contextBudget: tokenNumber(metadata.context_budget),
+    },
+  });
+  base.session = NormalizedSession.parse({
+    ...base.session,
+    model: first(metadata.model, base.session.model) ?? null,
+    title: first(metadata.title, base.session.title) ?? basename(path),
+    startedAt: iso(metadata.created_at, base.session.startedAt),
+    endedAt: iso(metadata.updated_at, base.session.endedAt ?? base.session.startedAt),
+    tokenInput: tokenNumber(metadata.total_input_tokens) || base.session.tokenInput,
+    tokenOutput: tokenNumber(metadata.total_output_tokens) || base.session.tokenOutput,
+  });
+  return base;
+}
+
 // --- registry ---
 
 export interface IntakeRoot {
@@ -227,6 +290,16 @@ export const PROVIDERS: ProviderIntake[] = [
       match: p => /\.system_generated\/logs\/transcript\.jsonl$/.test(p),
     }],
     parse: parseAntigravity,
+  },
+  {
+    id: "evot",
+    name: "Evot",
+    roots: [{
+      path: `${home}/.evotai/sessions`,
+      kinds: [".jsonl"],
+      match: p => /\/transcript\.jsonl$/.test(p),
+    }],
+    parse: parseEvot,
   },
   // OpenCode is indexed through its sqlite store, not file walking (see indexOpenCode).
   { id: "opencode", name: "OpenCode", roots: [{ path: `${home}/.local/share/opencode`, kinds: [".json", ".jsonl"] }] },

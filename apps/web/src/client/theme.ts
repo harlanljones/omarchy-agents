@@ -5,6 +5,7 @@ export const colors: Record<string, string> = {
   antigravity: "#4285f4",
   fireworks: "#ff6b22",
   opencode: "#b478e6",
+  evot: "#4aa8ff",
 };
 
 export const fmt = new Intl.NumberFormat("en", {

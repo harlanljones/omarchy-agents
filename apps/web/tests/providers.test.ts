@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PROVIDERS, isIndexed, parseCline, parseAntigravity, parseJsonl } from "../src/server/providers";
+import * as providerModule from "../src/server/providers";
+
+const { PROVIDERS, isIndexed, parseCline, parseAntigravity, parseJsonl } = providerModule;
 
 describe("provider registry", () => {
   test("coverage is derived from the registry, not a hardcoded list", () => {
@@ -10,6 +12,7 @@ describe("provider registry", () => {
     expect(isIndexed("codex")).toBe(true);
     expect(isIndexed("cline")).toBe(true);
     expect(isIndexed("antigravity")).toBe(true);
+    expect(isIndexed("evot")).toBe(true);
     // OpenCode exposes a cursor-based indexer; simulate the wiring done in indexer.ts.
     PROVIDERS.find(p => p.id === "opencode")!.index = () => {};
     expect(isIndexed("opencode")).toBe(true);
@@ -22,6 +25,77 @@ describe("provider registry", () => {
       if (p.id === "fireworks") continue;
       expect(p.parse || p.index).toBeTruthy();
     }
+  });
+});
+
+describe("Evot transcript intake adapter", () => {
+  test("flattens batched transcript items and uses authoritative session metadata", () => {
+    const parseEvot = (providerModule as Record<string, unknown>).parseEvot as typeof parseJsonl | undefined;
+    expect(parseEvot).toBeFunction();
+    const dir = mkdtempSync(join(tmpdir(), "evot-intake-"));
+    const sessionDir = join(dir, "session-123");
+    mkdirSync(sessionDir, { recursive: true });
+    const path = join(sessionDir, "transcript.jsonl");
+    writeFileSync(join(sessionDir, "session.json"), JSON.stringify({
+      session_id: "session-123",
+      cwd: "/work/evot-project",
+      title: "Fix the deployment",
+      model: "gpt-5.6-luna",
+      provider: "evot-free",
+      created_at: "2026-08-28T10:00:00Z",
+      updated_at: "2026-08-28T10:05:00Z",
+      total_input_tokens: 1200,
+      total_output_tokens: 300,
+      context_tokens: 900,
+      context_budget: 1000000,
+    }));
+    writeFileSync(path, [
+      JSON.stringify([
+        { session_id: "session-123", seq: 1, item: { type: "user", text: "fix it" } },
+        { session_id: "session-123", seq: 2, item: { type: "assistant", timestamp: "2026-08-28T10:01:00Z", content: [
+          { type: "text", text: "working" },
+          { type: "tool_call", id: "call-1", name: "bash", input: { cmd: "true" } },
+        ] } },
+        { session_id: "session-123", seq: 3, item: { type: "tool_result", tool_call_id: "call-1", tool_name: "bash", content: "ok", is_error: false } },
+        { session_id: "session-123", seq: 4, item: { type: "stats", kind: "llm_call_completed", data: { usage: { input_tokens: 99, output_tokens: 10 } } } },
+      ]),
+    ].join("\n"));
+
+    const result = parseEvot!("evot", path, readFileSync(path, "utf8"))!;
+    expect(result.session.id).toBe("session-123");
+    expect(result.session.project).toBe("/work/evot-project");
+    expect(result.session.title).toBe("Fix the deployment");
+    expect(result.session.model).toBe("gpt-5.6-luna");
+    expect(result.session.tokenInput).toBe(1200);
+    expect(result.session.tokenOutput).toBe(300);
+    expect(result.session.toolCount).toBe(1);
+    expect(result.events.map(event => event.kind)).toEqual(["prompt", "response", "tool_call", "tool_result"]);
+    expect(result.events.find(event => event.kind === "tool_call")?.toolName).toBe("bash");
+    expect(result.session.metadata).toMatchObject({ format: "evot-jsonl", evotProvider: "evot-free", contextTokens: 900, contextBudget: 1000000 });
+  });
+
+  test("falls back to per-turn usage when an interrupted session leaves zero aggregates", () => {
+    const dir = mkdtempSync(join(tmpdir(), "evot-zero-aggregate-"));
+    const sessionDir = join(dir, "session-zero");
+    mkdirSync(sessionDir, { recursive: true });
+    const path = join(sessionDir, "transcript.jsonl");
+    writeFileSync(join(sessionDir, "session.json"), JSON.stringify({
+      session_id: "session-zero",
+      cwd: "/work/interrupted",
+      model: "gpt-5.6-luna",
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+    }));
+    writeFileSync(path, JSON.stringify([
+      { session_id: "session-zero", seq: 1, item: { type: "assistant", content: [{ type: "text", text: "partial" }], usage: { input: 90, output: 10, cache_read: 5, cache_write: 2 } } },
+    ]));
+
+    const parseEvot = (providerModule as Record<string, unknown>).parseEvot as typeof parseJsonl;
+    const result = parseEvot("evot", path, readFileSync(path, "utf8"))!;
+    expect(result.session.tokenInput).toBe(90);
+    expect(result.session.tokenOutput).toBe(10);
+    expect(result.session.cacheRead).toBe(5);
+    expect(result.session.cacheWrite).toBe(2);
   });
 });
 

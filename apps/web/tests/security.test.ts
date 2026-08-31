@@ -14,6 +14,14 @@ describe("request boundary", () => {
   test("rejects a cross-site origin", async () => expect((await app.request("http://127.0.0.1/api/overview", { headers: { host: "127.0.0.1", origin: "https://evil.example" } })).status).toBe(403));
   test("requires Access configuration remotely", async () => expect((await app.request("https://agents.example.com/api/overview", { headers: { host: "agents.example.com" } })).status).toBe(401));
   test("requires JSON for mutations", async () => expect((await app.request("http://127.0.0.1/api/index/rebuild", { method: "POST", headers: { host: "127.0.0.1" } })).status).toBe(415));
+  test("applies the existing trust tier and JSON requirement to experiment mutations", async () => {
+    expect((await app.request("http://127.0.0.1/api/experiments", {
+      method: "POST", headers: { host: "127.0.0.1" }, body: "{}",
+    })).status).toBe(415);
+    expect((await app.request("https://agents.example.com/api/experiments", {
+      headers: { host: "agents.example.com" },
+    })).status).toBe(401);
+  });
 });
 
 describe("service identity boundary", () => {

@@ -11,7 +11,7 @@ import { PROVIDERS, parseJsonl, walk, tokenNumber, epochIso } from "./providers"
 export { parseJsonl };
 const home = process.env.HOME ?? "";
 const usageDir = process.env.AGENT_USAGE_DIR ?? `${home}/.local/state/omarchy/agents/usage`;
-const INDEXER_VERSION = "token-usage-v2";
+const INDEXER_VERSION = "token-usage-v3";
 // Separate from INDEXER_VERSION: gates the opencode.db time_updated cursor
 // stored in checkpoints.mtime_ms, without invalidating per-file jsonl checkpoints.
 const OPENCODE_CURSOR_VERSION = "opencode-cursor-v1";

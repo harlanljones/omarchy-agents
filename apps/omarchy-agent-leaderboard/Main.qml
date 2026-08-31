@@ -13,11 +13,33 @@ Item {
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string usageDir: (Quickshell.env("XDG_STATE_HOME") || home + "/.local/state") + "/omarchy/agents/usage"
+  readonly property string configDir: Quickshell.env("OMARCHY_AGENTS_CONFIG") || (home + "/.config/omarchy-agents")
 
   property var agentIds: []
   property var agents: []
   property var records: []
+  property var pricingOverrides: ({})
   property int dataRevision: 0
+
+  FileView {
+    path: root.configDir + "/pricing.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var parsed = JSON.parse(String(text() || ""))
+        root.pricingOverrides = parsed && typeof parsed === "object" ? parsed : ({})
+      } catch (e) {
+        root.pricingOverrides = ({})
+      }
+      root.publishRecords()
+    }
+    onLoadFailed: {
+      root.pricingOverrides = ({})
+      root.publishRecords()
+    }
+  }
 
   Process {
     id: listProcess

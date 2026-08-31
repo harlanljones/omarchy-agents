@@ -66,7 +66,7 @@ bun run check        # test + typecheck + build across the workspace
 bun run dev --filter=@omarchy-agents/web
 ```
 
-The dashboard serves `http://127.0.0.1:4317`. It indexes local Claude, Codex, Cline, Antigravity, OpenCode, Fireworks, and usage-collector stores; secret-like content is redacted before anything is persisted.
+The dashboard serves `http://127.0.0.1:4317`. It indexes local Claude, Codex, Cline, Antigravity, Evot, OpenCode, Fireworks, and usage-collector stores; secret-like content is redacted before anything is persisted.
 
 On the Analyst page, paste a prompt or enter an indexed session ID to run the prompt analyzer. It reports low/medium/high complexity across context, reasoning, tool use, code scope, reliability, and latency; recommendations are advisory and only use known pricing. Unknown model pricing, missing context, and conflicting requirements are shown explicitly.
 

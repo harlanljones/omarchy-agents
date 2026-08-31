@@ -19,6 +19,7 @@
     "apps/web": {
       "name": "@omarchy-agents/web",
       "dependencies": {
+        "@phosphor-icons/react": "^2.1.10",
         "@tanstack/react-virtual": "^3.13.12",
         "@visx/axis": "^3.12.0",
         "@visx/group": "^3.12.0",
@@ -45,14 +46,6 @@
     },
   },
   "packages": {
-    "@omarchy-agents/omarchy-agent-leaderboard": ["@omarchy-agents/omarchy-agent-leaderboard@workspace:apps/omarchy-agent-leaderboard"],
-
-    "@omarchy-agents/omarchy-agent-usage": ["@omarchy-agents/omarchy-agent-usage@workspace:apps/omarchy-agent-usage"],
-
-    "@omarchy-agents/provider-assets": ["@omarchy-agents/provider-assets@workspace:packages/provider-assets"],
-
-    "@omarchy-agents/web": ["@omarchy-agents/web@workspace:apps/web"],
-
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
     "@babel/compat-data": ["@babel/compat-data@7.29.7", "", {}, "sha512-locTkQyKvwIEgBzVrn8693ebc97F2U8ZHjbXwDXJ5Fn2TCpNwTlKcaKLkdHop5c/icOFE7qt7Q9JC5hnKNa6Gg=="],
@@ -154,6 +147,16 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@napi-rs/lzma-linux-x64-gnu": ["@napi-rs/lzma-linux-x64-gnu@1.5.1", "", { "os": "linux", "cpu": "x64" }, "sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ=="],
+
+    "@omarchy-agents/omarchy-agent-leaderboard": ["@omarchy-agents/omarchy-agent-leaderboard@workspace:apps/omarchy-agent-leaderboard"],
+
+    "@omarchy-agents/omarchy-agent-usage": ["@omarchy-agents/omarchy-agent-usage@workspace:apps/omarchy-agent-usage"],
+
+    "@omarchy-agents/provider-assets": ["@omarchy-agents/provider-assets@workspace:packages/provider-assets"],
+
+    "@omarchy-agents/web": ["@omarchy-agents/web@workspace:apps/web"],
+
+    "@phosphor-icons/react": ["@phosphor-icons/react@2.1.10", "", { "peerDependencies": { "react": ">= 16.8", "react-dom": ">= 16.8" } }, "sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-rc.3", "", {}, "sha512-eybk3TjzzzV97Dlj5c+XrBFW57eTNhzod66y9HrBlzJ6NsCrWCp/2kaPS3K9wJmurBC0Tdw4yPjXKZqlznim3Q=="],
 

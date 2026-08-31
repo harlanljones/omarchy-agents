@@ -367,8 +367,8 @@ select {
 .standing {
   display: grid;
   grid-template-columns:
-    58px minmax(160px, 1.5fr) minmax(85px, 0.7fr) minmax(100px, 0.7fr)
-    minmax(100px, 1fr);
+    58px minmax(140px, 1.5fr) minmax(75px, 0.7fr) minmax(75px, 0.7fr) minmax(85px, 0.7fr)
+    minmax(90px, 1fr);
   align-items: center;
   gap: 12px;
   min-height: 63px;
@@ -381,8 +381,12 @@ select {
   text-transform: uppercase;
 }
 .rank,
-.tokens {
+.tokens,
+.spend {
   font: 500 14px "IBM Plex Mono";
+}
+.spend {
+  color: var(--dim);
 }
 .provider {
   display: flex;
@@ -2084,4 +2088,115 @@ select {
     grid-column: 2;
     grid-row: 1 / span 2;
   }
+}
+
+/* Evidence-backed experiments */
+.experiment-review,
+.experiment-setup,
+.experiment-active { width: 100%; min-width: 0; }
+.experiment-pagehead { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.experiment-pagehead > div > span { color: var(--dim); font: 10px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .05em; }
+.experiment-pagehead h1 { margin: 8px 0; font: 400 clamp(26px, 3vw, 38px)/1 "IBM Plex Mono", monospace; letter-spacing: -.035em; }
+.experiment-pagehead p { margin: 0; color: var(--muted); font-size: 12px; }
+.experiment-thread { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; list-style: none; margin: 0; padding: 20px 0 22px; border-bottom: 1px solid var(--line); }
+.experiment-thread li { position: relative; min-height: 88px; padding: 0 24px 0 0; }
+.experiment-thread li + li { padding-left: 24px; border-left: 1px solid var(--line); }
+.experiment-thread li:not(:last-child)::after { content: ""; position: absolute; right: 10px; top: 6px; width: 34px; border-top: 1px solid var(--accent); }
+.experiment-thread span,
+.experiment-metric-band dt { display: block; color: var(--dim); font: 10px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; }
+.experiment-thread strong { display: block; margin: 10px 0 5px; font: 500 13px "IBM Plex Mono", monospace; }
+.experiment-thread p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.experiment-metric-band { display: grid; grid-template-columns: 1.15fr repeat(2, .9fr) .65fr 1.55fr .8fr; margin: 0; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.experiment-metric-band > div { min-width: 0; padding: 0 22px; }
+.experiment-metric-band > div:first-child { padding-left: 0; }
+.experiment-metric-band > div + div { border-left: 1px solid var(--line); }
+.experiment-metric-band dd { margin: 8px 0 4px; font: 500 18px "IBM Plex Mono", monospace; overflow-wrap: anywhere; }
+.experiment-metric-band small { color: var(--muted); font-size: 11px; }
+.experiment-evidence { padding-top: 18px; border-bottom: 1px solid var(--line); }
+.experiment-evidence > header { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding-bottom: 10px; }
+.experiment-evidence h2 { margin: 0 0 4px; font-size: 14px; }
+.experiment-evidence p { margin: 0; color: var(--muted); font-size: 11px; }
+.experiment-table-scroll { overflow-x: auto; border-top: 1px solid var(--line); }
+.experiment-table-scroll table { width: 100%; min-width: 1050px; border-collapse: collapse; font-size: 12px; }
+.experiment-table-scroll th,
+.experiment-table-scroll td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.experiment-table-scroll thead th { color: var(--dim); font: 9px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; }
+.experiment-table-scroll tbody th { font: 500 11px "IBM Plex Mono", monospace; }
+.experiment-table-scroll tr.missing { color: var(--muted); }
+.experiment-provider { display: inline-flex; align-items: center; gap: 8px; }
+.experiment-provider img { width: 18px; height: 18px; object-fit: contain; }
+.experiment-provider strong { font-weight: 600; }
+.experiment-conclusion { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(320px, 1.4fr) minmax(270px, 1fr) minmax(190px, .7fr); gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.experiment-conclusion h2 { margin: 0 0 5px; font-size: 14px; }
+.experiment-conclusion p { margin: 0; color: var(--muted); font-size: 11px; }
+.experiment-conclusion textarea { width: 100%; min-height: 120px; resize: vertical; }
+.experiment-conclusion fieldset,
+.experiment-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
+.experiment-conclusion legend,
+.experiment-picker legend { margin-bottom: 8px; font: 500 11px "IBM Plex Mono", monospace; }
+.experiment-conclusion fieldset label { display: grid; grid-template-columns: auto 1fr; align-items: start; padding: 7px 8px; border: 1px solid var(--line); }
+.experiment-conclusion fieldset label + label { margin-top: 5px; }
+.experiment-conclusion fieldset label:has(input:checked) { border-color: var(--accent); background: var(--lift); }
+.experiment-conclusion fieldset small { display: block; color: var(--muted); }
+.experiment-save { width: 100%; border: 1px solid color-mix(in srgb, var(--accent) 85%, white); border-radius: 8px; padding: 10px 12px; background: var(--accent); color: var(--base); cursor: pointer; }
+.experiment-save:disabled { cursor: not-allowed; opacity: .45; }
+.experiment-provenance { padding-top: 16px; color: var(--dim); font: 9px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; }
+.experiment-steps { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; margin: 0 0 24px; padding: 18px 0; border-bottom: 1px solid var(--line); color: var(--muted); font: 11px "IBM Plex Mono", monospace; }
+.experiment-steps li + li { padding-left: 18px; border-left: 1px solid var(--line); }
+.experiment-field { display: grid; gap: 7px; margin: 20px 0; max-width: 800px; }
+.experiment-field textarea { min-height: 100px; resize: vertical; }
+.experiment-fields { display: flex; gap: 16px; margin-bottom: 20px; }
+.experiment-fields label { display: grid; gap: 7px; }
+.experiment-picker { padding: 18px 0; border-top: 1px solid var(--line); }
+.experiment-picker > p { color: var(--muted); font-size: 11px; }
+.experiment-picker-list { max-height: 360px; overflow: auto; border-top: 1px solid var(--line); margin-bottom: 12px; }
+.experiment-picker-list label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.experiment-picker-list span { display: grid; }
+.experiment-picker-list small,
+.experiment-picker-list em { color: var(--muted); font-size: 10px; font-style: normal; }
+.experiment-live-metric { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 10px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.experiment-live-metric strong { font: 500 22px "IBM Plex Mono", monospace; }
+.experiment-live-metric span { color: var(--muted); font-size: 11px; }
+.experiment-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 18px; }
+.experiment-history { position: relative; }
+.experiment-history-menu { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: min(360px, 90vw); padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: -14px 0 36px rgba(0,0,0,.32); }
+.experiment-history-menu button { display: grid; width: 100%; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 9px; border: 0; background: transparent; text-align: left; }
+.experiment-history-menu button:hover { background: var(--lift); }
+.experiment-review-history { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.experiment-review-history summary { cursor: pointer; font: 500 11px "IBM Plex Mono", monospace; }
+.experiment-review-history ol { margin: 12px 0 0; padding-left: 22px; }
+.experiment-review-history li { padding: 8px 0; color: var(--muted); }
+.experiment-review-history strong { color: var(--ink); margin-right: 10px; }
+.experiment-review-history time { font: 10px "IBM Plex Mono", monospace; }
+.experiment-review-history p { margin: 4px 0 0; }
+@media (max-width: 1100px) {
+  .experiment-thread { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .experiment-thread li:nth-child(4) { padding-left: 0; border-left: 0; }
+  .experiment-metric-band { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 20px; }
+  .experiment-metric-band > div:nth-child(4) { padding-left: 0; border-left: 0; }
+  .experiment-conclusion { grid-template-columns: minmax(200px, .7fr) minmax(320px, 1.3fr); }
+}
+@media (max-width: 720px) {
+  .experiment-pagehead { align-items: start; flex-direction: column; }
+  .experiment-thread,
+  .experiment-metric-band,
+  .experiment-conclusion,
+  .experiment-steps { grid-template-columns: 1fr; }
+  .experiment-thread li,
+  .experiment-thread li + li { min-height: 0; padding: 12px 0; border-left: 0; border-bottom: 1px solid var(--line); }
+  .experiment-thread li::after { display: none; }
+  .experiment-metric-band > div,
+  .experiment-metric-band > div:first-child,
+  .experiment-metric-band > div:nth-child(4) { padding: 12px 0; border-left: 0; border-bottom: 1px solid var(--line); }
+  .experiment-evidence > header,
+  .experiment-fields,
+  .experiment-actions { align-items: stretch; flex-direction: column; }
+  .experiment-evidence .segmented { max-width: 100%; overflow-x: auto; }
+  .experiment-picker-list label { grid-template-columns: auto minmax(0, 1fr); }
+  .experiment-picker-list em { grid-column: 2; }
+  .experiment-conclusion { gap: 18px; }
+  .experiment-save { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .experiment-review *, .experiment-setup *, .experiment-active *, .experiment-history * { scroll-behavior: auto; transition-duration: .01ms !important; }
 }

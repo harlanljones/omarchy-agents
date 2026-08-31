@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { initializeExperimentSchema } from "./experiments";
 
 const home = process.env.HOME ?? "/tmp";
 export const DB_PATH = process.env.OMARCHY_AGENTS_DB ?? `${home}/.local/state/omarchy-agents/index.sqlite`;
@@ -30,5 +31,6 @@ CREATE INDEX IF NOT EXISTS usage_alerts_active ON usage_alerts(resolved_at, fire
 CREATE TABLE IF NOT EXISTS recommendation_log (id INTEGER PRIMARY KEY AUTOINCREMENT, provider TEXT NOT NULL, provider_name TEXT NOT NULL, previous_provider TEXT, previous_provider_name TEXT, changed_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS recommendation_log_time ON recommendation_log(changed_at DESC);
 `);
+initializeExperimentSchema(db);
 
 export function json<T>(value: string | null | undefined, fallback: T): T { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } }

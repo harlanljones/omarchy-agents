@@ -49,23 +49,194 @@ export const LogEvent = z.object({
   metadata: z.record(z.string(), z.unknown()).default({})
 });
 
+export const MetricKind = z.enum([
+  "tool_failure_rate",
+  "tokens_per_session",
+  "average_duration_minutes",
+  "cache_read_ratio",
+]);
+export const ExperimentState = z.enum(["draft", "active", "ready_for_review", "completed"]);
+export const CohortKind = z.enum(["baseline", "trial"]);
+export const ExperimentOutcome = z.enum(["adopt_change", "extend_trial", "no_improvement"]);
+export const SampleNote = z.enum(["small_sample", "uneven_cohorts", "descriptive_only"]);
+
 export const EvidenceCitation = z.object({
-  id: z.string(), provider: z.string(), sessionId: z.string(), eventId: z.string(), timestamp: z.string(), excerpt: z.string()
+  id: z.string(),
+  provider: z.string(),
+  sessionId: z.string(),
+  anchor: z.enum(["session", "event"]).default("event"),
+  eventId: z.string().nullable().default(null),
+  timestamp: z.string(),
+  excerpt: z.string(),
+}).superRefine((citation, context) => {
+  if (citation.anchor === "event" && citation.eventId === null) {
+    context.addIssue({ code: "custom", path: ["eventId"], message: "event citations require eventId" });
+  }
+  if (citation.anchor === "session" && citation.eventId !== null) {
+    context.addIssue({ code: "custom", path: ["eventId"], message: "session citations require a null eventId" });
+  }
+});
+
+export const Finding = z.object({
+  key: z.string(),
+  type: z.string(),
+  provider: z.string().nullable().default(null),
+  severity: z.enum(["info", "warning", "critical"]),
+  message: z.string(),
+  value: z.number().optional(),
+  evidence: z.array(EvidenceCitation),
+});
+export const ExperimentDefaults = z.object({
+  hypothesis: z.string().trim().min(1).max(1000),
+  metricKind: MetricKind,
+  metricVersion: z.literal(1),
+  targetValue: z.number().finite().nonnegative(),
 });
 export const Suggestion = z.object({
-  id: z.string(), reportId: z.string(), title: z.string(), impact: z.enum(["low", "medium", "high"]),
-  effort: z.enum(["low", "medium", "high"]), confidence: z.number().min(0).max(1), rationale: z.string(),
-  evidence: z.array(EvidenceCitation), status: z.enum(["open", "accepted", "dismissed"]), createdAt: z.string()
+  id: z.string(),
+  reportId: z.string(),
+  findingKey: z.string().nullable(),
+  title: z.string(),
+  impact: z.enum(["low", "medium", "high"]),
+  effort: z.enum(["low", "medium", "high"]),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string(),
+  evidence: z.array(EvidenceCitation),
+  status: z.enum(["open", "accepted", "dismissed"]),
+  createdAt: z.string(),
+  experiment: ExperimentDefaults.nullable(),
+  experimentId: z.string().nullable(),
 });
 export const AnalysisReport = z.object({
-  id: z.string(), createdAt: z.string(), periodStart: z.string(), periodEnd: z.string(), model: z.string(),
-  summary: z.string(), detectors: z.array(z.object({ type: z.string(), severity: z.enum(["info", "warning", "critical"]), message: z.string(), value: z.number().optional(), evidence: z.array(EvidenceCitation) })),
-  suggestions: z.array(Suggestion)
+  id: z.string(),
+  createdAt: z.string(),
+  periodStart: z.string(),
+  periodEnd: z.string(),
+  model: z.string(),
+  summary: z.string(),
+  detectors: z.array(Finding),
+  suggestions: z.array(Suggestion),
+});
+
+const uniqueIds = (ids: string[], context: z.RefinementCtx) => {
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: "custom", message: "session IDs must be unique" });
+  }
+};
+export const CreateExperimentInput = z.object({
+  suggestionId: z.string().min(1),
+  hypothesis: z.string().trim().min(1).max(1000),
+  metricKind: MetricKind,
+  targetValue: z.number().finite().nonnegative(),
+  baselineSessionIds: z.array(z.string().min(1)).min(1),
+}).superRefine((value, context) => uniqueIds(value.baselineSessionIds, context));
+export const ReplaceCohortInput = z.object({
+  sessionIds: z.array(z.string().min(1)),
+}).superRefine((value, context) => uniqueIds(value.sessionIds, context));
+export const ReviewExperimentInput = z.object({
+  outcome: ExperimentOutcome,
+  note: z.string().trim().min(1).max(1000),
 });
 export type UsageRecord = z.infer<typeof UsageRecordV1>;
 export type Session = z.infer<typeof NormalizedSession>;
 export type Event = z.infer<typeof LogEvent>;
 export type Citation = z.infer<typeof EvidenceCitation>;
+export type MetricKind = z.infer<typeof MetricKind>;
+export type ExperimentState = z.infer<typeof ExperimentState>;
+export type CohortKind = z.infer<typeof CohortKind>;
+export type ExperimentOutcome = z.infer<typeof ExperimentOutcome>;
+export type SampleNote = z.infer<typeof SampleNote>;
+export type Finding = z.infer<typeof Finding>;
+export type ExperimentDefaults = z.infer<typeof ExperimentDefaults>;
+export type Suggestion = z.infer<typeof Suggestion>;
+export type AnalysisReport = z.infer<typeof AnalysisReport>;
+export type CreateExperimentInput = z.infer<typeof CreateExperimentInput>;
+export type ReplaceCohortInput = z.infer<typeof ReplaceCohortInput>;
+export type ReviewExperimentInput = z.infer<typeof ReviewExperimentInput>;
+export type ExclusionReason = "session_missing" | "zero_denominator" | "invalid_duration";
+export type SessionContribution = {
+  sessionId: string;
+  cohort: CohortKind;
+  provider: string;
+  startedAt: string;
+  endedAt: string | null;
+  value: number;
+  numerator: number | null;
+  denominator: number | null;
+};
+export type ExcludedSession = { sessionId: string; reason: ExclusionReason };
+export type CohortCalculation = {
+  value: number | null;
+  formatted: string;
+  validCount: number;
+  contributions: SessionContribution[];
+  excluded: ExcludedSession[];
+};
+export type ExperimentCalculation = {
+  metricKind: MetricKind;
+  metricVersion: 1;
+  direction: "lower" | "higher";
+  targetValue: number;
+  baseline: CohortCalculation;
+  trial: CohortCalculation;
+  absoluteDelta: number | null;
+  directionalDelta: number | null;
+  targetMet: boolean | null;
+  improved: boolean | null;
+  sampleNote: SampleNote;
+  calculatedAt: string;
+};
+export type ExperimentSourceSnapshot = {
+  findingKey: string;
+  finding: Finding | null;
+  suggestion: {
+    title: string;
+    rationale: string;
+    evidence: Citation[];
+    defaults: ExperimentDefaults;
+  };
+};
+export type ExperimentReviewRecord = {
+  id: string;
+  outcome: ExperimentOutcome;
+  note: string;
+  calculation: ExperimentCalculation;
+  createdAt: string;
+};
+export type ExperimentSummary = {
+  id: string;
+  title: string;
+  state: ExperimentState;
+  metricKind: MetricKind;
+  sourceSuggestionId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+export type ExperimentSessionView = {
+  sessionId: string; cohort: CohortKind; available: boolean;
+  provider: string | null; title: string | null; startedAt: string | null; endedAt: string | null;
+  tokenTotal: number | null; errorCount: number | null; toolCount: number | null;
+  evidenceEventId: string | null;
+};
+
+export type ExperimentDetail = ExperimentSummary & {
+  sourceReportId: string;
+  source: ExperimentSourceSnapshot;
+  hypothesis: string;
+  metricVersion: 1;
+  targetValue: number;
+  cohorts: Record<CohortKind, string[]>;
+  sessions: ExperimentSessionView[];
+  currentCalculation: ExperimentCalculation;
+  reviews: ExperimentReviewRecord[];
+  availableActions: {
+    replaceBaseline: boolean;
+    replaceTrial: boolean;
+    start: boolean;
+    markReady: boolean;
+    review: boolean;
+  };
+};
 
 export type LimitKind = "session" | "weekly" | "monthly" | "other";
 export type LimitWindowView = {

@@ -12,12 +12,23 @@ import { chatStream, modelHealth, runNightly } from "./server/analyst";
 import { limitsBoard, advise, loadUsageRecords, TASK_PRESETS } from "./server/limits";
 import { alertsInbox, incidentsView } from "./server/watch";
 import type { TaskProfile } from "./shared/schemas";
-import { effectivePricingTable, pricingOverrideError } from "./server/pricing";
-import { UsageRecordV1 } from "./shared/schemas";
+import { effectivePricingTable, pricingOverrideError, ratesForModel, estimateCostUsd } from "./server/pricing";
+import { UsageRecordV1, CohortKind, ExperimentState } from "./shared/schemas";
 import { analyzePrompt } from "./server/prompt-analysis";
 import { productivityActivity, productivityResponse, startProductivitySync, syncProductivitySources } from "./server/productivity";
+import { createExperimentService, ExperimentError } from "./server/experiments";
 
 const app = new Hono();
+const experimentService = createExperimentService(db);
+const experimentResponse = <T,>(c: Context, operation: () => T, successStatus: 200 | 201 = 200) => {
+  try { return c.json(operation(), successStatus); }
+  catch (error) {
+    if (error instanceof ExperimentError) {
+      return c.json({ error: error.message, code: error.code, ...(error.details === undefined ? {} : { details: error.details }) }, error.status);
+    }
+    throw error;
+  }
+};
 app.use(compress());
 app.use("*", security);
 app.use("/limits", requireAdmin);
@@ -70,12 +81,27 @@ app.get("/api/overview", c => {
     const since = period === "today" ? "start of day" : period === "week" ? "-7 days" : period === "month" ? "-30 days" : null;
     const clauses = ["project = ?"], args: any[] = [project];
     if (since) { clauses.push("started_at >= datetime('now', ?)"); args.push(since); }
-    const totals = db.query(`SELECT provider providerId, SUM(token_input+token_output+cache_read+cache_write) tokens FROM sessions WHERE ${clauses.join(" AND ")} GROUP BY provider ORDER BY tokens DESC`).all(...args) as Array<{ providerId: string; tokens: number }>;
+    const sessionsList = db.query(`SELECT provider providerId, token_input tokenInput, token_output tokenOutput, cache_read cacheRead, cache_write cacheWrite, model FROM sessions WHERE ${clauses.join(" AND ")}`).all(...args) as Array<any>;
+    const providerMap = new Map<string, { tokens: number; estCostUsd: number }>();
+    for (const s of sessionsList) {
+      const t = Number(s.tokenInput) + Number(s.tokenOutput) + Number(s.cacheRead) + Number(s.cacheWrite);
+      let cost = 0;
+      if (s.model) {
+        const rates = ratesForModel(s.model);
+        if (rates?.rates) {
+          cost = estimateCostUsd(rates.rates, { input: Number(s.tokenInput), output: Number(s.tokenOutput), cacheRead: Number(s.cacheRead), cacheWrite: Number(s.cacheWrite) } as any);
+        }
+      }
+      const existing = providerMap.get(s.providerId) ?? { tokens: 0, estCostUsd: 0 };
+      providerMap.set(s.providerId, { tokens: existing.tokens + t, estCostUsd: existing.estCostUsd + cost });
+    }
+    const totals = Array.from(providerMap.entries()).map(([providerId, data]) => ({ providerId, tokens: data.tokens, estCostUsd: data.estCostUsd })).sort((a, b) => b.tokens - a.tokens);
     const total = totals.reduce((sum, row) => sum + Number(row.tokens), 0);
+    const totalCostUsd = totals.reduce((sum, row) => sum + row.estCostUsd, 0);
     let previous = -1, rankNumber = 0;
-    board = { total, rows: totals.map((row, index) => { if (Number(row.tokens) !== previous) rankNumber = index + 1; previous = Number(row.tokens); return { ...row, providerName: row.providerId, tokens: Number(row.tokens), rank: rankNumber, share: total ? Number(row.tokens) / total : 0, coverage: "indexed", updatedAt: new Date().toISOString() }; }) } as any;
+    board = { total, totalCostUsd, rows: totals.map((row, index) => { if (Number(row.tokens) !== previous) rankNumber = index + 1; previous = Number(row.tokens); return { ...row, providerName: row.providerId, tokens: Number(row.tokens), estCostUsd: row.estCostUsd, rank: rankNumber, share: total ? Number(row.tokens) / total : 0, coverage: "indexed", updatedAt: new Date().toISOString() }; }) } as any;
   }
-    return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: isIndexed(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
+  return c.json({ ...board, freshness: records.map(r => ({ provider: r.id, updatedAt: r.updatedAt ?? null, coverage: isIndexed(r.id) ? "indexed" : "metrics-only" })), index: indexProgress() });
 });
 app.get("/limits/api/board", c => c.json(limitsBoard(indexProgress())));
 app.get("/limits/api/alerts", c => c.json(alertsInbox()));
@@ -123,9 +149,69 @@ app.get("/api/filter-options", c => c.json({
   models: (db.query("SELECT DISTINCT model FROM sessions WHERE model IS NOT NULL AND trim(model) <> '' ORDER BY model COLLATE NOCASE").all() as Array<{ model: string }>).map(row => row.model),
 }));
 app.get("/api/timeseries", c => { const rawDays = Number(c.req.query("days") ?? 30), days = Number.isFinite(rawDays) ? Math.min(365, Math.max(1, Math.floor(rawDays))) : 30, project = c.req.query("project")?.trim() ?? ""; if (!project && days <= 7) return c.json({ days, source: "collector", rows: collectorTimeseries(days) }); const clauses = ["started_at>=datetime('now',?)"], args: any[] = [`-${days} days`]; if (project) { clauses.push("project=?"); args.push(project); } return c.json({ days, source: "indexed", rows: db.query(`SELECT strftime('%Y-%m-%d',started_at) day,provider,SUM(token_input+token_output+cache_read+cache_write) tokens,COUNT(*) sessions FROM sessions WHERE ${clauses.join(" AND ")} GROUP BY day,provider ORDER BY day`).all(...args) }); });
-app.get("/api/sessions", c => { const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50))), offset = Math.max(0, Number(c.req.query("offset") ?? 0)); const clauses: string[] = [], args: any[] = []; for (const key of ["provider", "model", "project"] as const) if (c.req.query(key)) { clauses.push(`${key} LIKE ?`); args.push(`%${c.req.query(key)}%`); } if (c.req.query("errors") === "true") clauses.push("error_count>0"); const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""; const rows = db.query(`SELECT id,provider,model,project,title,started_at startedAt,ended_at endedAt,token_input tokenInput,token_output tokenOutput,cache_read cacheRead,cache_write cacheWrite,error_count errorCount,tool_count toolCount FROM sessions ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`).all(...args, limit, offset); const total = (db.query(`SELECT COUNT(*) total FROM sessions ${where}`).get(...args) as any).total; return c.json({ rows, total, limit, offset }); });
+app.get("/api/sessions", c => {
+  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 50))), offset = Math.max(0, Number(c.req.query("offset") ?? 0));
+  const clauses: string[] = [], args: any[] = [];
+  if (c.req.query("id")) { clauses.push("id=?"); args.push(c.req.query("id")); }
+  for (const key of ["provider", "model", "project"] as const) if (c.req.query(key)) { clauses.push(`${key} LIKE ?`); args.push(`%${c.req.query(key)}%`); }
+  if (c.req.query("errors") === "true") clauses.push("error_count>0");
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = db.query(`SELECT id,provider,model,project,title,started_at startedAt,ended_at endedAt,token_input tokenInput,token_output tokenOutput,cache_read cacheRead,cache_write cacheWrite,error_count errorCount,tool_count toolCount FROM sessions ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`).all(...args, limit, offset) as any[];
+  const total = (db.query(`SELECT COUNT(*) total FROM sessions ${where}`).get(...args) as any).total;
+  const enriched = rows.map(r => {
+    let estCostUsd: number | null = null;
+    if (r.model) {
+      const rates = ratesForModel(r.model);
+      if (rates?.rates) {
+        estCostUsd = estimateCostUsd(rates.rates, { input: Number(r.tokenInput), output: Number(r.tokenOutput), cacheRead: Number(r.cacheRead), cacheWrite: Number(r.cacheWrite) } as any);
+      }
+    }
+    return { ...r, estCostUsd };
+  });
+  return c.json({ rows: enriched, total, limit, offset });
+});
 app.get("/api/sessions/:id/events", c => { const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 100))), offset = Math.max(0, Number(c.req.query("offset") ?? 0)); return c.json({ rows: db.query("SELECT id,session_id sessionId,ordinal,kind,timestamp,text,tool_name toolName,source_locator sourceLocator FROM events WHERE session_id=? ORDER BY ordinal LIMIT ? OFFSET ?").all(c.req.param("id"), limit, offset), limit, offset }); });
-app.get("/api/reports", c => c.json({ rows: (db.query("SELECT * FROM reports ORDER BY created_at DESC LIMIT 50").all() as any[]).map(r => ({ id: r.id, createdAt: r.created_at, periodStart: r.period_start, periodEnd: r.period_end, model: r.model, summary: r.summary, detectors: json(r.detectors_json, []), suggestions: (db.query("SELECT * FROM suggestions WHERE report_id=?").all(r.id) as any[]).map(s => ({ ...s, evidence: json(s.evidence_json, []) })) })) }));
+app.get("/api/experiments", (c) => experimentResponse(c, () => {
+  const state = c.req.query("state");
+  if (!state) return { rows: experimentService.listExperiments() };
+  const parsed = ExperimentState.safeParse(state);
+  if (!parsed.success) throw new ExperimentError(400, "invalid_request", "state is not a valid experiment state", parsed.error.flatten());
+  return { rows: experimentService.listExperiments({ state: parsed.data }) };
+}));
+app.get("/api/experiments/:id", (c) => experimentResponse(c, () => experimentService.getExperiment(c.req.param("id"))));
+app.post("/api/experiments", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  return experimentResponse(c, () => experimentService.createExperiment(body), 201);
+});
+app.put("/api/experiments/:id/cohorts/:cohort", async (c) => {
+  const cohort = CohortKind.safeParse(c.req.param("cohort"));
+  if (!cohort.success) return c.json({ error: "cohort must be baseline or trial", code: "invalid_request" }, 400);
+  const body = await c.req.json().catch(() => null) as any;
+  return experimentResponse(c, () => experimentService.replaceCohort(c.req.param("id"), cohort.data, body?.sessionIds));
+});
+app.post("/api/experiments/:id/start", (c) => experimentResponse(c, () => experimentService.startExperiment(c.req.param("id"))));
+app.post("/api/experiments/:id/ready", (c) => experimentResponse(c, () => experimentService.markReadyForReview(c.req.param("id"))));
+app.post("/api/experiments/:id/reviews", async (c) => {
+  const body = await c.req.json().catch(() => null) as any;
+  return experimentResponse(c, () => experimentService.reviewExperiment(c.req.param("id"), body), 201);
+});
+const reportSuggestionRows = db.query(`SELECT s.*,e.id experiment_id
+  FROM suggestions s LEFT JOIN experiments e ON e.source_suggestion_id=s.id
+  WHERE s.report_id=? ORDER BY s.created_at,s.id`);
+const suggestionDto = (row: any) => ({
+  id: row.id, reportId: row.report_id, findingKey: row.finding_key,
+  title: row.title, impact: row.impact, effort: row.effort, confidence: Number(row.confidence),
+  rationale: row.rationale, evidence: json(row.evidence_json, []), status: row.status,
+  createdAt: row.created_at, experiment: json(row.experiment_json, null), experimentId: row.experiment_id ?? null,
+});
+app.get("/api/reports", (c) => c.json({
+  rows: (db.query("SELECT * FROM reports ORDER BY created_at DESC LIMIT 50").all() as any[]).map((report) => ({
+    id: report.id, createdAt: report.created_at, periodStart: report.period_start,
+    periodEnd: report.period_end, model: report.model, summary: report.summary,
+    detectors: json(report.detectors_json, []),
+    suggestions: reportSuggestionRows.all(report.id).map(suggestionDto),
+  })),
+}));
 app.post("/api/prompt-analysis", async c => {
   const body = await c.req.json().catch(() => null) as any;
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";

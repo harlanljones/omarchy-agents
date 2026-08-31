@@ -34,11 +34,13 @@ Panel {
   property bool cursorActive: false
   property double nowMs: Date.now()
 
+  readonly property var effectiveSettings: Object.assign({}, root.settings, { pricingOverrides: usage.pricingOverrides })
+
   readonly property var board: {
     var rev = usage.dataRevision
     if (root.viewMode === "model")
-      return Model.rankByModel(usage.records, root.period, root.settings)
-    return Model.rankRecords(usage.records, root.period, root.settings)
+      return Model.rankByModel(usage.records, root.period, root.effectiveSettings)
+    return Model.rankRecords(usage.records, root.period, root.effectiveSettings)
   }
   readonly property var modelBoard: root.viewMode === "model" ? board : null
   readonly property bool isModelView: root.viewMode === "model"
@@ -624,6 +626,20 @@ Panel {
       elide: Text.ElideRight
       anchors.left: mark.right
       anchors.leftMargin: Style.space(8)
+      anchors.right: costLabel.visible ? costLabel.left : shareLabel.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Text {
+      id: costLabel
+      visible: rankRow.row && rankRow.row.cost > 0
+      text: rankRow.row ? Model.formatCost(rankRow.row.cost) : ""
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      width: Style.space(48)
+      horizontalAlignment: Text.AlignRight
       anchors.right: shareLabel.left
       anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -638,7 +654,7 @@ Panel {
       width: Style.space(30)
       horizontalAlignment: Text.AlignRight
       anchors.right: tokensLabel.left
-      anchors.rightMargin: Style.space(12)
+      anchors.rightMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
     }
 

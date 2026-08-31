@@ -188,9 +188,23 @@ assertEqual(series.days[5].total, 10_611_954, "Friday is Codex-only")
 assertEqual(series.days[6].parts.length, 3, "Saturday has all three agents")
 assertEqual(series.peak, 10_611_954, "peak is the busiest day")
 
-assertEqual(M.heroMeta(today, "today"), "Today · 6.3M · Claude Code", "hero is short and names the leader")
-assertEqual(M.barTooltip(today, "today"), "Claude Code leads today · 5.2M tokens", "bar tooltip names the leader")
-assertEqual(M.selectedSummary(today.rows[0], "today"), "50 prompts · 1 session", "today summary uses today's counts")
+assertEqual(M.formatCost(0), "$0.00", "zero cost formats as $0.00")
+assertEqual(M.formatCost(0.002), "<$0.01", "sub-cent cost formats as <$0.01")
+assertEqual(M.formatCost(1.468), "$1.47", "normal cost formats with two decimals")
+assertEqual(M.formatCost(1250), "$1.3K", "large cost formats with K suffix")
+
+assert(Math.abs(today.rows[0].cost - 1.46795852) < 0.001, "Claude cost is estimated from DeepSeek rates")
+assert(Math.abs(today.rows[1].cost - 2.3732057) < 0.001, "Codex cost is estimated from GPT-5 rates")
+assert(Math.abs(today.rows[2].cost - 0.1699) < 0.001, "Cline cost sums GLM and Kimi buckets")
+assert(Math.abs(today.totalCost - 4.01106) < 0.001, "today total cost sums all agents")
+
+assertEqual(M.heroMeta(today, "today"), "Today · 6.3M ($4.01) · Claude Code", "hero includes formatted total cost")
+assertEqual(M.barTooltip(today, "today"), "Claude Code leads today · 5.2M tokens ($1.47)", "bar tooltip includes leader cost")
+assertEqual(M.selectedSummary(today.rows[0], "today"), "50 prompts · 1 session · est. $1.47", "today summary includes estimated cost")
 assertEqual(M.dayLabel("2026-08-15", true), "Today", "today's column is labeled Today")
+
+// Pricing overrides
+const overridden = M.rankRecords(records, "today", { pricingOverrides: { "deepseek-v4-pro": { inputPerMtok: 10, outputPerMtok: 20 } } })
+assert(overridden.rows[0].cost > 50, "pricing override takes effect in rankRecords")
 
 console.log("ok")
