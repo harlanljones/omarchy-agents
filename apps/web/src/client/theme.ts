@@ -1,11 +1,11 @@
 export const colors: Record<string, string> = {
-  claude: "#d97757",
-  codex: "#10a37f",
-  cline: "#6bcb77",
+  claude: "#e07a5f",
+  codex: "#10b981",
+  cline: "#70d480",
   antigravity: "#4285f4",
-  fireworks: "#ff6b22",
-  opencode: "#b478e6",
-  evot: "#4aa8ff",
+  fireworks: "#ff7830",
+  opencode: "#bd85f2",
+  evot: "#38bdf8",
 };
 
 export const fmt = new Intl.NumberFormat("en", {

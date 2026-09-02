@@ -87,16 +87,64 @@ function Mark({ id }: { id: string }) {
 }
 function Status({
   tone = "ok",
+  pill = false,
   children,
 }: {
   tone?: string;
+  pill?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <span className={`status ${tone}`}>
+    <span
+      className={`status ${tone} ${pill ? `status-pill ${tone === "ok" ? "indexed" : "metrics-only"}` : ""}`}
+    >
       <i aria-hidden="true" />
       {children}
     </span>
+  );
+}
+
+function TelemetryRibbon({
+  tokenTotal,
+  activeProviders,
+  indexState,
+}: {
+  tokenTotal?: number;
+  activeProviders?: number;
+  indexState?: string;
+}) {
+  return (
+    <aside className="telemetry-ribbon" aria-label="System telemetry">
+      <div className="telemetry-group">
+        <div className="telemetry-item">
+          <span className="telemetry-label">Mission:</span>
+          <span className="telemetry-val">LOCAL DISPATCH</span>
+        </div>
+        <div className="telemetry-item">
+          <span className="telemetry-label">Active Units:</span>
+          <span className="telemetry-val">{activeProviders ?? "—"}</span>
+        </div>
+        {tokenTotal != null && tokenTotal > 0 && (
+          <div className="telemetry-item">
+            <span className="telemetry-label">Volume:</span>
+            <span className="telemetry-val">{fmt.format(tokenTotal)}</span>
+          </div>
+        )}
+      </div>
+      <div className="telemetry-group">
+        <div className="telemetry-item">
+          <span className="telemetry-label">Daemon:</span>
+          <span className={`telemetry-chip ${indexState === "ready" ? "live" : ""}`}>
+            <i aria-hidden="true" />
+            {indexState === "ready"
+              ? "TELEMETRY LIVE"
+              : indexState
+                ? `INDEX ${indexState.toUpperCase()}`
+                : "STANDBY"}
+          </span>
+        </div>
+      </div>
+    </aside>
   );
 }
 function NavIcon({ id }: { id: Nav }) {
@@ -365,6 +413,11 @@ function Overview({
     !onboardDismissed;
   return (
     <div className="overview">
+      <TelemetryRibbon
+        tokenTotal={board.total}
+        activeProviders={board.rows.length}
+        indexState={board.index?.state}
+      />
       {showOnboard && (
         <section className="notice onboard" aria-label="Get started">
           <div>
@@ -481,7 +534,7 @@ function Overview({
                 <td className="tokens">{fmt.format(row.tokens)}</td>
                 <td className="spend">{formatUsd(row.estCostUsd)}</td>
                 <td>
-                  <Status tone={row.coverage === "indexed" ? "ok" : "warn"}>
+                  <Status tone={row.coverage === "indexed" ? "ok" : "warn"} pill>
                     {row.coverage}
                   </Status>
                 </td>
@@ -2122,8 +2175,16 @@ function Settings() {
         <h2>Keyboard</h2>
         <dl>
           <div>
-            <dt>1 – 5</dt>
-            <dd>Jump to Overview, Logs, Analyst, Settings, or Limits</dd>
+            <dt>1 – 6</dt>
+            <dd>Jump to Overview, Logs, Analyst, Experiments, Settings, or Limits</dd>
+          </div>
+          <div>
+            <dt>[</dt>
+            <dd>Toggle navigation rail collapse</dd>
+          </div>
+          <div>
+            <dt>]</dt>
+            <dd>Toggle analyst inspector collapse</dd>
           </div>
           <div>
             <dt>Esc</dt>
@@ -2144,6 +2205,7 @@ function App() {
   const [nav, setNav] = useState<Nav>(() => navFromPath()),
     [rail, setRail] = useState(false),
     [railCollapsed, setRailCollapsed] = useState(false),
+    [navCollapsed, setNavCollapsed] = useState(false),
     [compactLayout, setCompactLayout] = useState(false);
   const railRef = useRef<HTMLElement>(null);
   const railToggleRef = useRef<HTMLButtonElement>(null);
@@ -2221,6 +2283,17 @@ function App() {
         navigate(map[event.key]);
         return;
       }
+      if (event.key === "[") {
+        event.preventDefault();
+        setNavCollapsed((c) => !c);
+        return;
+      }
+      if (event.key === "]") {
+        event.preventDefault();
+        if (railCollapsed) openRail();
+        else closeRail();
+        return;
+      }
       if (event.key === "Escape" && (rail || !railCollapsed)) closeRail();
     };
     window.addEventListener("keydown", onKey);
@@ -2254,7 +2327,7 @@ function App() {
   const ownsFullWidth = nav === "analyst" || nav === "experiments";
   return (
     <div
-      className={`shell ${ownsFullWidth || railCollapsed ? "without-rail" : ""} ${nav === "limits" ? "limits-shell" : ""}`}
+      className={`shell ${ownsFullWidth || railCollapsed ? "without-rail" : ""} ${navCollapsed ? "nav-collapsed" : ""} ${nav === "limits" ? "limits-shell" : ""}`}
     >
       <a href="#main" className="skip">
         Skip to content
@@ -2293,8 +2366,9 @@ function App() {
           data-form-seed="established-omarchy-console/control-room-a"
         >
           THESIS: local activity becomes inspectable evidence. OWN-WORLD:
-          Omarchy console. STORY: compare, inspect, ask, decide. FIRST VIEWPORT:
-          standings and advisory rail. FORM: ruled control room.
+          Aerospace Telemetry & Mission Control. STORY: compare, inspect, ask, decide. FIRST VIEWPORT:
+          standings, telemetry ribbon, and advisory rail. FORM: ruled control room.
+          FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
         </div>
         {!ownsFullWidth && (nav !== "overview" || railCollapsed) && (
           <button

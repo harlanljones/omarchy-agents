@@ -147,6 +147,14 @@ export function HistoryChart({
         aria-label={`Stacked token totals over ${days.length} days for ${providers.join(", ") || "no providers"}`}
         viewBox={`0 0 ${width} ${height}`}
       >
+        <defs>
+          {providers.map((p) => (
+            <linearGradient id={`grad-${p}`} key={p} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={colors[p] ?? "#77838d"} stopOpacity="0.95" />
+              <stop offset="100%" stopColor={colors[p] ?? "#77838d"} stopOpacity="0.45" />
+            </linearGradient>
+          ))}
+        </defs>
         <Group left={margin.left} top={margin.top}>
           {yTicks.map((tick) => (
             <g key={tick} className="chart-tick">
@@ -181,8 +189,11 @@ export function HistoryChart({
                       y={bar.y}
                       width={bar.width}
                       height={bar.height}
-                      fill={bar.color}
-                      rx="2"
+                      fill={`url(#grad-${stack.key})`}
+                      stroke={colors[stack.key] ?? "#77838d"}
+                      strokeWidth="1"
+                      strokeOpacity="0.6"
+                      rx="3"
                     >
                       <title>
                         {stack.key}: {fmt.format(Number(bar.bar.data[stack.key]))} tokens

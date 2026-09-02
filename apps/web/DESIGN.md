@@ -2,39 +2,41 @@
 name: Omarchy Agents
 description: A local-first evidence control room for comparing, inspecting, and questioning agent activity.
 colors:
-  ink: "#f2f4f5"
-  muted: "#97a1a9"
-  dim: "#7f8a93"
-  base: "#0b0d0f"
-  surface: "#111518"
-  lift: "#171c20"
-  line: "#283036"
+  ink: "#f0f4f8"
+  muted: "#8c9ba8"
+  dim: "#677684"
+  base: "#080a0f"
+  surface: "#0d1117"
+  lift: "#131922"
+  line: "#1c2430"
+  hairline: "#26303d"
   accent: "#d5ba64"
   focus: "#86b7ff"
-  nav-deep: "#0e1113"
-  hover-surface: "#1d2429"
-  link: "#b7cee8"
-  status-ok: "#65c18c"
-  status-warning: "#e0b75c"
-  status-error: "#ee7777"
-  provider-claude: "#d97757"
-  provider-codex: "#10a37f"
-  provider-cline: "#6bcb77"
+  nav-deep: "#0a0c10"
+  hover-surface: "#18202b"
+  link: "#93c5fd"
+  status-ok: "#4ade80"
+  status-warning: "#fbbf24"
+  status-error: "#f87171"
+  provider-claude: "#e07a5f"
+  provider-codex: "#10b981"
+  provider-cline: "#70d480"
   provider-antigravity: "#4285f4"
-  provider-fireworks: "#ff6b22"
-  provider-opencode: "#b478e6"
-  provider-fallback: "#77838d"
-  scrollbar: "#3b464e"
-  status-text: "#b7c0c6"
-  hairline-strong: "#46525b"
-  hairline-soft: "#52606a"
-  text-soft: "#c6ccd0"
-  text-softer: "#c7cdd1"
-  error-text: "#f0a5a5"
-  error-border: "#7a4141"
-  error-fill: "#f0b0b0"
-  overlay-scrim: "rgba(0, 0, 0, 0.5)"
-  overlay-shadow: "rgba(0, 0, 0, 0.32)"
+  provider-fireworks: "#ff7830"
+  provider-opencode: "#bd85f2"
+  provider-evot: "#38bdf8"
+  provider-fallback: "#64748b"
+  scrollbar: "#26303d"
+  status-text: "#94a3b8"
+  hairline-strong: "#334155"
+  hairline-soft: "#1e293b"
+  text-soft: "#cbd5e1"
+  text-softer: "#e2e8f0"
+  error-text: "#fca5a5"
+  error-border: "#7f1d1d"
+  error-fill: "rgba(239, 68, 68, 0.12)"
+  overlay-scrim: "rgba(0, 0, 0, 0.65)"
+  overlay-shadow: "rgba(0, 0, 0, 0.45)"
 typography:
   display:
     fontFamily: '"IBM Plex Mono", monospace'
@@ -166,20 +168,21 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Evidence Control Room"**
+**Creative North Star: "Aerospace Telemetry & Mission Control"**
 
-Omarchy Agents inherits the visual world of an Omarchy system console: dark, quiet, tightly ruled, and built for sustained scrutiny. Its character comes from terminal-adjacent typography, near-black tonal layers, persistent navigation and analyst edges, and small operational signals rather than decorative illustration. The trophy and provider marks supply identity without turning the interface into a branded showcase.
+Omarchy Agents inherits the visual world of an aerospace mission-control console: deep obsidian, carbon slate, razor-sharp 1px hairlines, and high-density telemetry instrumentation built for sustained scrutiny. Its character comes from precision monospaced typography, multi-layered obsidian depth, glowing phosphor status signals, and real-time telemetry ribbons rather than decorative fluff. The trophy and provider marks supply identity with luminous precision.
 
-The system makes local activity legible as evidence. Its visual story is compare, inspect, ask, decide: standings and history lead; sessions open into addressable transcript events; the local analyst remains visibly advisory and citation-bound. Density is intentional, but hierarchy, alignment, and generous vertical intervals keep the control room calm.
+The system makes local activity legible as evidence. Its visual story is compare, inspect, ask, decide: standings and history lead; sessions open into addressable transcript events; the local analyst remains visibly advisory and citation-bound. Density is intentional, but hierarchy, alignment, subtle glow states, and generous vertical intervals keep the telemetry deck calm.
 
 **Key Characteristics:**
 
-- Dark, low-chroma Omarchy console surfaces.
-- Ruled data regions instead of floating dashboard cards.
-- Monospaced headings, labels, metrics, timestamps, and evidence.
-- Persistent desktop navigation and analyst rails with responsive drawer and bottom-navigation transformations.
-- Restrained gold selection accent, semantic status dots, and provider color used only for attribution.
-- Keyboard-visible focus, non-color status labels, and reduced-motion behavior.
+- Deep obsidian and carbon slate surfaces with 1px precision hairline borders.
+- Top real-time telemetry ribbon showing token velocity, active providers, and indexing daemon health.
+- Ruled data regions with subtle row hover illumination.
+- Monospaced headings, labels, metrics, timestamps, and evidence with crisp optical sizing.
+- Adaptive Cockpit with collapsible left navigation and right analyst inspector rails.
+- Restrained gold orientation accent, phosphor status pills, and luminous provider hues.
+- Full keyboard-visible focus, non-color status labels, and reduced-motion behavior.
 
 ## Colors
 
