@@ -29,15 +29,35 @@ describe("built-in rates", () => {
     expect(ratesForModel("claude-haiku-4-5-20251001")?.match).toBe("claude-haiku");
     expect(ratesForModel("gpt-5.6-luna")?.match).toBe("gpt-5");
     expect(ratesForModel("deepseek-v4-flash")?.source).toBe("built-in");
+    expect(ratesForModel("hy3-free")?.match).toBe("hy3");
+    expect(ratesForModel("grok-4.6")?.match).toBe("grok");
+    expect(ratesForModel("gpt-oss-20b")?.match).toBe("gpt-oss");
+    expect(ratesForModel("o4-mini")?.match).toBe("o4");
   });
   test("vendor prefixes and casings are normalized away", () => {
     expect(normalizeModel("@cf/deepseek-ai/deepseek-v4-flash-0731")).toBe("deepseek-ai/deepseek-v4-flash-0731");
     expect(normalizeModel("Anthropic/Claude-Opus-5")).toBe("claude-opus-5");
     expect(ratesForModel("Claude-Sonnet-5")?.match).toBe("claude-sonnet");
   });
+  test("opencode provider/model keys price at the underlying market rate", () => {
+    expect(ratesForModel("opencode-go/deepseek-v4-flash")?.match).toBe("deepseek");
+    expect(ratesForModel("opencode-go/hy3")?.match).toBe("hy3");
+    expect(ratesForModel("opencode/x-preview-f-free")?.match).toBe("x-preview");
+    expect(ratesForModel("venice/stealth-ox-alpha")?.match).toBe("ox-alpha");
+    expect(ratesForModel("openrouter/openai/o4-mini")?.match).toBe("o4");
+    expect(ratesForModel("groq/qwen/qwen3.8-27b")?.match).toBe("qwen");
+    expect(ratesForModel("freetoken/gpt-oss-20b")?.match).toBe("gpt-oss");
+  });
+  test("free-tier markers strip so free usage prices as if it were paid", () => {
+    expect(ratesForModel("hy3-free")?.rates!.inputPerMtok).toBe(0.15);
+    expect(ratesForModel("tencent/hy3:free")?.match).toBe("hy3");
+    expect(ratesForModel("coding-kimi-k3-free")?.match).toBe("coding-kimi");
+    expect(ratesForModel("muse-spark-1.2-contributor-free")?.match).toBe("muse-spark");
+    expect(ratesForModel("ox-alpha-free")?.match).toBe("ox-alpha");
+  });
   test("unknown models are unpriced rather than guessed", () => {
-    expect(ratesForModel("big-pickle")).toBeNull();
-    expect(ratesForModel("stealth-ox-alpha")).toBeNull();
+    expect(ratesForModel("zz-unknown-model")).toBeNull();
+    expect(ratesForModel("mystery-vendor-alpha")).toBeNull();
   });
 });
 

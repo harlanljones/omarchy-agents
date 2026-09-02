@@ -20,7 +20,39 @@ const BUILT_IN: TableEntry[] = [
   { match: "kimi", inputPerMtok: 0.6, outputPerMtok: 2.5, cacheReadPerMtok: 0.06, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
   { match: "glm", inputPerMtok: 0.6, outputPerMtok: 2.2, cacheReadPerMtok: 0.11, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
   { match: "qwen", inputPerMtok: 0.55, outputPerMtok: 2.2, cacheReadPerMtok: 0.055, cacheWritePerMtok: 0.55, asOf: PRICING_AS_OF },
+  { match: "grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
+  { match: "hy3", inputPerMtok: 0.15, outputPerMtok: 0.6, cacheReadPerMtok: 0.015, cacheWritePerMtok: 0.1875, asOf: PRICING_AS_OF },
+  { match: "gemini", inputPerMtok: 0.5, outputPerMtok: 3, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
+  { match: "minimax", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
+  { match: "solar", inputPerMtok: 0.5, outputPerMtok: 1.5, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
+  { match: "o4", inputPerMtok: 1.1, outputPerMtok: 4.4, cacheReadPerMtok: 0.11, cacheWritePerMtok: 1.375, asOf: PRICING_AS_OF },
+  { match: "muse-spark", inputPerMtok: 1.25, outputPerMtok: 4.25, cacheReadPerMtok: 0.15, cacheWritePerMtok: 1.5625, asOf: PRICING_AS_OF },
+  { match: "coding-kimi", inputPerMtok: 0.95, outputPerMtok: 4, cacheReadPerMtok: 0.19, cacheWritePerMtok: 1.1875, asOf: PRICING_AS_OF },
+  { match: "gpt-oss", inputPerMtok: 0.2, outputPerMtok: 0.3, cacheReadPerMtok: 0.02, cacheWritePerMtok: 0.25, asOf: PRICING_AS_OF },
+  { match: "ox-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
+  { match: "x-preview", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
+  { match: "big-pickle", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
 ];
+
+// OpenCode (and other routers) store usage per provider/model, so a model key
+// arrives as `opencode-go/deepseek-v4-flash`, `openrouter/openai/o4-mini`, or
+// `@cf/deepseek-ai/deepseek-v4-flash-0731`. Strip the leading provider segment
+// (repeatedly, in case providers nest) before matching against the rate table.
+// Longer names must precede shorter ones so `opencode-go/` wins over `opencode/`.
+const PROVIDER_PREFIXES = [
+  "cloudflare-workers-ai", "opencode-go", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
+  "openrouter", "gmicloud", "aerolink", "gorouter", "orcarouter", "nano-gpt", "openai", "anthropic",
+  "microsoft", "google", "meta", "models", "freetoken", "opencode", "venice", "nous", "groq", "x-ai",
+  "upstage", "tencent", "bai", "@cf",
+];
+const PROVIDER_PREFIX = new RegExp(`^(?:${PROVIDER_PREFIXES.join("|")})/`);
+
+// Free-tier variants of paid models (e.g. `hy3-free`, `tencent/hy3:free`,
+// `coding-kimi-k3-free`, `muse-spark-1.2-contributor-free`) carry the same
+// model id as their paid base. Strip the free marker so the rate table prices
+// them at the underlying market rate — the estimate then reflects what the
+// usage would cost if it were not free.
+const FREE_MARKER = /(?:-contributor)?[-:]?free$/;
 
 const OverrideRates = z.object({
   inputPerMtok: z.coerce.number().min(0), outputPerMtok: z.coerce.number().min(0),
@@ -50,7 +82,12 @@ function loadOverrides() {
 
 export function pricingOverrideError() { return loadOverrides().error; }
 
-export const normalizeModel = (model: string) => String(model ?? "").toLowerCase().replace(/^(@cf\/|models\/|(?:openai|anthropic|google|meta|microsoft)\/)/, "");
+export const normalizeModel = (model: string) => {
+  let normalized = String(model ?? "").toLowerCase();
+  while (PROVIDER_PREFIX.test(normalized)) normalized = normalized.replace(PROVIDER_PREFIX, "");
+  normalized = normalized.replace(/^stealth-/, "");
+  return normalized.replace(FREE_MARKER, "");
+};
 
 function longestMatch(normalized: string, matches: string[]) {
   return matches.filter(m => normalized.startsWith(m)).sort((a, b) => b.length - a.length)[0] ?? null;

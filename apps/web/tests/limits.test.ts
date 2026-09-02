@@ -133,10 +133,10 @@ describe("advisor", () => {
     expect(advice.rows[0].fitsTask).toBe(false);
   });
   test("unpriced dominant models surface honestly", () => {
-    const exotic = record({ ...codex, modelUsage: { "big-pickle": { inputTokens: 1, outputTokens: 1 } } });
+    const exotic = record({ ...codex, modelUsage: { "zz-unknown-model": { inputTokens: 1, outputTokens: 1 } } });
     const advice = advise([exotic], TASK_PRESETS.small, NOW);
     expect(advice.rows[0].estCostUsd).toBeNull();
-    expect(advice.rows[0].unpricedModels).toEqual(["big-pickle"]);
+    expect(advice.rows[0].unpricedModels).toEqual(["zz-unknown-model"]);
   });
   test("non-ready platforms never top the ranking", () => {
     const broken = record({ id: "broken", name: "Broken", ready: false, authHelpText: "Run `x auth login`" });
