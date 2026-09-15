@@ -10,9 +10,14 @@ type TableEntry = Rates & { match: string; asOf: string };
 export const PRICING_AS_OF = "2026-08-01";
 
 const BUILT_IN: TableEntry[] = [
+  { match: "claude-fable", inputPerMtok: 10, outputPerMtok: 50, cacheReadPerMtok: 1, cacheWritePerMtok: 12.5, asOf: "2026-09-10" },
   { match: "claude-opus", inputPerMtok: 5, outputPerMtok: 25, cacheReadPerMtok: 0.5, cacheWritePerMtok: 6.25, asOf: PRICING_AS_OF },
   { match: "claude-sonnet", inputPerMtok: 3, outputPerMtok: 15, cacheReadPerMtok: 0.3, cacheWritePerMtok: 3.75, asOf: PRICING_AS_OF },
   { match: "claude-haiku", inputPerMtok: 1, outputPerMtok: 5, cacheReadPerMtok: 0.1, cacheWritePerMtok: 1.25, asOf: PRICING_AS_OF },
+  { match: "gpt-6-astra", inputPerMtok: 10, outputPerMtok: 50, cacheReadPerMtok: 1, cacheWritePerMtok: 12.5, asOf: "2026-09-10" },
+  { match: "gpt-5.6-sol", inputPerMtok: 4, outputPerMtok: 20, cacheReadPerMtok: 0.4, cacheWritePerMtok: 5, asOf: "2026-09-10" },
+  { match: "gpt-5.6-terra", inputPerMtok: 2, outputPerMtok: 12, cacheReadPerMtok: 0.2, cacheWritePerMtok: 2.5, asOf: "2026-09-10" },
+  { match: "gpt-5.6-luna", inputPerMtok: 0.2, outputPerMtok: 1.2, cacheReadPerMtok: 0.02, cacheWritePerMtok: 0.25, asOf: "2026-09-10" },
   { match: "gpt-5", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "gpt-4", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "codex", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
@@ -21,6 +26,7 @@ const BUILT_IN: TableEntry[] = [
   { match: "glm", inputPerMtok: 0.6, outputPerMtok: 2.2, cacheReadPerMtok: 0.11, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
   { match: "qwen", inputPerMtok: 0.55, outputPerMtok: 2.2, cacheReadPerMtok: 0.055, cacheWritePerMtok: 0.55, asOf: PRICING_AS_OF },
   { match: "grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
+  { match: "cursor-grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "hy3", inputPerMtok: 0.15, outputPerMtok: 0.6, cacheReadPerMtok: 0.015, cacheWritePerMtok: 0.1875, asOf: PRICING_AS_OF },
   { match: "gemini", inputPerMtok: 0.5, outputPerMtok: 3, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
   { match: "minimax", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
@@ -40,7 +46,7 @@ const BUILT_IN: TableEntry[] = [
 // (repeatedly, in case providers nest) before matching against the rate table.
 // Longer names must precede shorter ones so `opencode-go/` wins over `opencode/`.
 const PROVIDER_PREFIXES = [
-  "cloudflare-workers-ai", "opencode-go", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
+  "cloudflare-workers-ai", "opencode-go", "cheaper-inference", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
   "openrouter", "gmicloud", "aerolink", "gorouter", "orcarouter", "nano-gpt", "openai", "anthropic",
   "microsoft", "google", "meta", "models", "freetoken", "opencode", "venice", "nous", "groq", "x-ai",
   "upstage", "tencent", "bai", "@cf",

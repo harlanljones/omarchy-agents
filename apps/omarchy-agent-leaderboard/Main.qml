@@ -114,10 +114,17 @@ Item {
     try { return decodeURIComponent(url) } catch (e) { return url }
   }
 
+  readonly property string hermesHelper: {
+    var url = String(Qt.resolvedUrl("collect-hermes.py"))
+    if (url.indexOf("file://") === 0) url = url.substring(7)
+    try { return decodeURIComponent(url) } catch (e) { return url }
+  }
+
   Component.onCompleted: {
     rescanAgents()
     runFireworksOfficial()
     runAntigravityCollector()
+    runHermesCollector()
   }
 
   property int refreshIntervalSec: Math.max(30, Number(setting("refreshIntervalSec", 900)))
@@ -137,6 +144,7 @@ Item {
     onExited: {
       root.runFireworksOfficial()
       root.runAntigravityCollector()
+      root.runHermesCollector()
       if (root.pendingUpdateKind !== "") {
         var kind = root.pendingUpdateKind
         root.pendingUpdateKind = ""
@@ -170,6 +178,16 @@ Item {
     }
   }
 
+  Process {
+    id: hermesProcess
+    running: false
+    onExited: root.rescanAgents()
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim() !== "") console.warn("agent-leaderboard/hermes", text.trim())
+    }
+  }
+
   function runFireworksOfficial() {
     if (fireworksProcess.running || root.fireworksHelper === "") {
       root.rescanAgents()
@@ -186,6 +204,15 @@ Item {
     }
     antigravityProcess.command = ["python3", root.antigravityHelper]
     antigravityProcess.running = true
+  }
+
+  function runHermesCollector() {
+    if (hermesProcess.running || root.hermesHelper === "") {
+      root.rescanAgents()
+      return
+    }
+    hermesProcess.command = ["python3", root.hermesHelper]
+    hermesProcess.running = true
   }
 
   function updateCommand(kind) {

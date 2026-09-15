@@ -20,6 +20,24 @@ function viewOptions() {
   return VIEWS.slice()
 }
 
+var SORTS = [
+  { value: "tokens", label: "Tokens" },
+  { value: "cost", label: "Cost" }
+]
+
+function sortOptions() {
+  return SORTS.slice()
+}
+
+// The standings order and the share/bar widths are computed against one basis:
+// raw token volume ("tokens", the default) or estimated spend ("cost"). Cost is
+// the meaningful comparator — expensive frontier models (gpt-6-astra,
+// claude-fable-5) must not be drowned out by cheap flash-tier token volume.
+function sortBasis(settings) {
+  var value = settings && settings.sortMode ? String(settings.sortMode) : ""
+  return value === "cost" ? "cost" : "tokens"
+}
+
 function periodLabel(period) {
   if (period === "week") return "Last 7 days"
   if (period === "all") return "All-time"
@@ -98,22 +116,64 @@ function providerEnabled(settings, id) {
 }
 
 var PRICING_AS_OF = "2026-08-01"
+var FRONTIER_PRICING_AS_OF = "2026-09-10"
 
 var BUILT_IN_PRICING = [
+  { match: "claude-fable", inputPerMtok: 10, outputPerMtok: 50, cacheReadPerMtok: 1, cacheWritePerMtok: 12.5, asOf: FRONTIER_PRICING_AS_OF },
   { match: "claude-opus", inputPerMtok: 5, outputPerMtok: 25, cacheReadPerMtok: 0.5, cacheWritePerMtok: 6.25, asOf: PRICING_AS_OF },
   { match: "claude-sonnet", inputPerMtok: 3, outputPerMtok: 15, cacheReadPerMtok: 0.3, cacheWritePerMtok: 3.75, asOf: PRICING_AS_OF },
   { match: "claude-haiku", inputPerMtok: 1, outputPerMtok: 5, cacheReadPerMtok: 0.1, cacheWritePerMtok: 1.25, asOf: PRICING_AS_OF },
+  { match: "gpt-6-astra", inputPerMtok: 10, outputPerMtok: 50, cacheReadPerMtok: 1, cacheWritePerMtok: 12.5, asOf: FRONTIER_PRICING_AS_OF },
+  { match: "gpt-5.6-sol", inputPerMtok: 4, outputPerMtok: 20, cacheReadPerMtok: 0.4, cacheWritePerMtok: 5, asOf: FRONTIER_PRICING_AS_OF },
+  { match: "gpt-5.6-terra", inputPerMtok: 2, outputPerMtok: 12, cacheReadPerMtok: 0.2, cacheWritePerMtok: 2.5, asOf: FRONTIER_PRICING_AS_OF },
+  { match: "gpt-5.6-luna", inputPerMtok: 0.2, outputPerMtok: 1.2, cacheReadPerMtok: 0.02, cacheWritePerMtok: 0.25, asOf: FRONTIER_PRICING_AS_OF },
   { match: "gpt-5", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "gpt-4", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "codex", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "deepseek", inputPerMtok: 0.28, outputPerMtok: 1.12, cacheReadPerMtok: 0.028, cacheWritePerMtok: 0.28, asOf: PRICING_AS_OF },
   { match: "kimi", inputPerMtok: 0.6, outputPerMtok: 2.5, cacheReadPerMtok: 0.06, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
   { match: "glm", inputPerMtok: 0.6, outputPerMtok: 2.2, cacheReadPerMtok: 0.11, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
-  { match: "qwen", inputPerMtok: 0.55, outputPerMtok: 2.2, cacheReadPerMtok: 0.055, cacheWritePerMtok: 0.55, asOf: PRICING_AS_OF }
+  { match: "qwen", inputPerMtok: 0.55, outputPerMtok: 2.2, cacheReadPerMtok: 0.055, cacheWritePerMtok: 0.55, asOf: PRICING_AS_OF },
+  { match: "grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
+  { match: "cursor-grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
+  { match: "hy3", inputPerMtok: 0.15, outputPerMtok: 0.6, cacheReadPerMtok: 0.015, cacheWritePerMtok: 0.1875, asOf: PRICING_AS_OF },
+  { match: "gemini", inputPerMtok: 0.5, outputPerMtok: 3, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
+  { match: "minimax", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
+  { match: "solar", inputPerMtok: 0.5, outputPerMtok: 1.5, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
+  { match: "o4", inputPerMtok: 1.1, outputPerMtok: 4.4, cacheReadPerMtok: 0.11, cacheWritePerMtok: 1.375, asOf: PRICING_AS_OF },
+  { match: "muse-spark", inputPerMtok: 1.25, outputPerMtok: 4.25, cacheReadPerMtok: 0.15, cacheWritePerMtok: 1.5625, asOf: PRICING_AS_OF },
+  { match: "coding-kimi", inputPerMtok: 0.95, outputPerMtok: 4, cacheReadPerMtok: 0.19, cacheWritePerMtok: 1.1875, asOf: PRICING_AS_OF },
+  { match: "gpt-oss", inputPerMtok: 0.2, outputPerMtok: 0.3, cacheReadPerMtok: 0.02, cacheWritePerMtok: 0.25, asOf: PRICING_AS_OF },
+  { match: "ox-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
+  { match: "x-preview", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
+  { match: "big-pickle", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF }
 ]
 
+// OpenCode (and other routers) store usage per provider/model, so a model key
+// arrives as `opencode-go/deepseek-v4-flash`, `cheaper-inference/gpt-6-astra`,
+// `openrouter/openai/o4-mini`, or `@cf/deepseek-ai/deepseek-v4-flash-0731`.
+// Strip the leading provider segment (repeatedly, in case providers nest)
+// before matching against the rate table.
+var PROVIDER_PREFIXES = [
+  "cloudflare-workers-ai", "opencode-go", "cheaper-inference", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
+  "openrouter", "gmicloud", "aerolink", "gorouter", "orcarouter", "nano-gpt", "openai", "anthropic",
+  "microsoft", "google", "meta", "models", "freetoken", "opencode", "venice", "nous", "groq", "x-ai",
+  "upstage", "tencent", "bai", "z-ai", "@cf"
+]
+var PROVIDER_PREFIX = new RegExp("^(?:" + PROVIDER_PREFIXES.join("|") + ")/")
+
+// Free-tier variants of paid models (e.g. `hy3-free`, `tencent/hy3:free`,
+// `coding-kimi-k3-free`, `muse-spark-1.2-contributor-free`) carry the same
+// model id as their paid base. Strip the free marker so the rate table prices
+// them at the underlying market rate — the estimate then reflects what the
+// usage would cost if it were not free.
+var FREE_MARKER = /(?:-contributor)?[-:]?free$/
+
 function normalizeModel(model) {
-  return String(model || "").toLowerCase().replace(/^(@cf\/|models\/|(?:openai|anthropic|google|meta|microsoft)\/)/, "")
+  var normalized = String(model || "").toLowerCase()
+  while (PROVIDER_PREFIX.test(normalized)) normalized = normalized.replace(PROVIDER_PREFIX, "")
+  normalized = normalized.replace(/^stealth-/, "")
+  return normalized.replace(FREE_MARKER, "")
 }
 
 function longestMatch(normalized, matches) {
@@ -285,6 +345,7 @@ function rankRecords(records, period, settings) {
   var window = String(period || "today")
   if (window !== "today" && window !== "week" && window !== "all") window = "today"
   var overrides = settings && settings.pricingOverrides ? settings.pricingOverrides : null
+  var basis = sortBasis(settings)
 
   for (var i = 0; i < list.length; i++) {
     var record = list[i]
@@ -319,6 +380,7 @@ function rankRecords(records, period, settings) {
   }
 
   rows.sort(function(a, b) {
+    if (basis === "cost" && a.cost !== b.cost) return b.cost - a.cost
     if (b.tokens !== a.tokens) return b.tokens - a.tokens
     return String(a.providerName).localeCompare(String(b.providerName))
   })
@@ -331,15 +393,20 @@ function rankRecords(records, period, settings) {
   }
 
   var rank = 0
-  var lastTokens = null
+  var lastValue = null
   for (var r = 0; r < rows.length; r++) {
-    if (lastTokens === null || rows[r].tokens !== lastTokens) {
+    var value = basis === "cost" ? rows[r].cost : rows[r].tokens
+    if (lastValue === null || value !== lastValue) {
       rank = r + 1
-      lastTokens = rows[r].tokens
+      lastValue = value
     }
     rows[r].rank = rank
-    rows[r].share = total > 0 ? rows[r].tokens / total : 0
-    rows[r].bar = rows.length > 0 && rows[0].tokens > 0 ? rows[r].tokens / rows[0].tokens : 0
+    rows[r].share = basis === "cost"
+      ? (totalCost > 0 ? rows[r].cost / totalCost : 0)
+      : (total > 0 ? rows[r].tokens / total : 0)
+    rows[r].bar = basis === "cost"
+      ? (rows.length > 0 && rows[0].cost > 0 ? rows[r].cost / rows[0].cost : 0)
+      : (rows.length > 0 && rows[0].tokens > 0 ? rows[r].tokens / rows[0].tokens : 0)
   }
 
   return {
@@ -347,6 +414,7 @@ function rankRecords(records, period, settings) {
     rows: rows,
     total: total,
     totalCost: totalCost,
+    basis: basis,
     leader: rows.length > 0 ? rows[0] : null
   }
 }
@@ -356,6 +424,7 @@ function rankByModel(records, period, settings) {
   var window = String(period || "today")
   if (window !== "today" && window !== "week" && window !== "all") window = "today"
   var overrides = settings && settings.pricingOverrides ? settings.pricingOverrides : null
+  var basis = sortBasis(settings)
 
   // Aggregate modelUsage across every enabled provider.
   // modelId -> { tokens: number, cost: number, providerId: string, providerName: string, todayTokens: number, todayCost: number }
@@ -423,6 +492,7 @@ function rankByModel(records, period, settings) {
   }
 
   rows.sort(function(a, b) {
+    if (basis === "cost" && a.cost !== b.cost) return b.cost - a.cost
     if (b.tokens !== a.tokens) return b.tokens - a.tokens
     return String(a.providerName).localeCompare(String(b.providerName))
   })
@@ -435,15 +505,20 @@ function rankByModel(records, period, settings) {
   }
 
   var rank = 0
-  var lastTokens = null
+  var lastValue = null
   for (var r = 0; r < rows.length; r++) {
-    if (lastTokens === null || rows[r].tokens !== lastTokens) {
+    var value = basis === "cost" ? rows[r].cost : rows[r].tokens
+    if (lastValue === null || value !== lastValue) {
       rank = r + 1
-      lastTokens = rows[r].tokens
+      lastValue = value
     }
     rows[r].rank = rank
-    rows[r].share = total > 0 ? rows[r].tokens / total : 0
-    rows[r].bar = rows.length > 0 && rows[0].tokens > 0 ? rows[r].tokens / rows[0].tokens : 0
+    rows[r].share = basis === "cost"
+      ? (totalCost > 0 ? rows[r].cost / totalCost : 0)
+      : (total > 0 ? rows[r].tokens / total : 0)
+    rows[r].bar = basis === "cost"
+      ? (rows.length > 0 && rows[0].cost > 0 ? rows[r].cost / rows[0].cost : 0)
+      : (rows.length > 0 && rows[0].tokens > 0 ? rows[r].tokens / rows[0].tokens : 0)
   }
 
   return {
@@ -451,6 +526,7 @@ function rankByModel(records, period, settings) {
     rows: rows,
     total: total,
     totalCost: totalCost,
+    basis: basis,
     leader: rows.length > 0 ? rows[0] : null
   }
 }
@@ -595,7 +671,8 @@ function friendlyProviderName(providerId) {
     "freetoken": "FreeToken",
     "gmicloud": "GMCloud",
     "gorouter": "GoRouter",
-    "nous": "Nous"
+    "nous": "Nous",
+    "z-ai": "Z.ai"
   }
   if (known[providerId]) return known[providerId]
   return providerId.split(/[-\s.]+/).map(function(w) {
@@ -643,8 +720,15 @@ function heroMeta(board, period, viewMode) {
   var modeLabel = viewMode === "model" ? " by model" : ""
   if (!board || !board.rows || board.rows.length === 0)
     return "No " + periodLabel(period).toLowerCase() + " usage yet"
-  var text = periodLabel(period) + modeLabel + " · " + formatTokenCount(board.total)
-  if (board.totalCost > 0) text += " (" + formatCost(board.totalCost) + ")"
+  var byCost = board.basis === "cost"
+  var header = periodLabel(period) + modeLabel + (byCost ? " by cost" : "")
+  if (byCost) {
+    var text = header + " · " + (board.totalCost > 0 ? formatCost(board.totalCost) : "$0.00")
+    text += " (" + formatTokenCount(board.total) + " tokens)"
+  } else {
+    var text = header + " · " + formatTokenCount(board.total)
+    if (board.totalCost > 0) text += " (" + formatCost(board.totalCost) + ")"
+  }
   if (board.leader) text += " · " + board.leader.providerName
   return text
 }
@@ -653,12 +737,16 @@ function barTooltip(board, period, viewMode) {
   var modeLabel = viewMode === "model" ? " (model)" : ""
   if (!board || !board.leader)
     return "Agent Leaderboard"
-  var costText = board.leader.cost > 0 ? " (" + formatCost(board.leader.cost) + ")" : ""
+  var byCost = board.basis === "cost"
+  var lead = byCost
+    ? formatCost(board.leader.cost) + " (est.)"
+    : formatTokenCount(board.leader.tokens) + " tokens"
+    + (board.leader.cost > 0 ? " (" + formatCost(board.leader.cost) + ")" : "")
   return board.leader.providerName + " leads "
     + periodLabel(period).toLowerCase()
     + modeLabel
-    + " · " + formatTokenCount(board.leader.tokens) + " tokens"
-    + costText
+    + (byCost ? " by cost" : "")
+    + " · " + lead
 }
 
 function selectedSummary(row, period, viewMode) {

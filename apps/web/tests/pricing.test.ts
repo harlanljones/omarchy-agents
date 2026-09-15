@@ -27,7 +27,11 @@ describe("built-in rates", () => {
   test("exact and prefix matching pick the most specific entry", () => {
     expect(ratesForModel("claude-opus-5")?.match).toBe("claude-opus");
     expect(ratesForModel("claude-haiku-4-5-20251001")?.match).toBe("claude-haiku");
-    expect(ratesForModel("gpt-5.6-luna")?.match).toBe("gpt-5");
+    expect(ratesForModel("claude-fable-5")?.match).toBe("claude-fable");
+    expect(ratesForModel("gpt-6-astra")?.match).toBe("gpt-6-astra");
+    expect(ratesForModel("gpt-5.6-sol")?.match).toBe("gpt-5.6-sol");
+    expect(ratesForModel("gpt-5.6-terra")?.match).toBe("gpt-5.6-terra");
+    expect(ratesForModel("gpt-5.6-luna")?.match).toBe("gpt-5.6-luna");
     expect(ratesForModel("deepseek-v4-flash")?.source).toBe("built-in");
     expect(ratesForModel("hy3-free")?.match).toBe("hy3");
     expect(ratesForModel("grok-4.6")?.match).toBe("grok");
@@ -45,6 +49,7 @@ describe("built-in rates", () => {
     expect(ratesForModel("opencode/x-preview-f-free")?.match).toBe("x-preview");
     expect(ratesForModel("venice/stealth-ox-alpha")?.match).toBe("ox-alpha");
     expect(ratesForModel("openrouter/openai/o4-mini")?.match).toBe("o4");
+    expect(ratesForModel("cheaper-inference/gpt-6-astra")?.match).toBe("gpt-6-astra");
     expect(ratesForModel("groq/qwen/qwen3.8-27b")?.match).toBe("qwen");
     expect(ratesForModel("freetoken/gpt-oss-20b")?.match).toBe("gpt-oss");
   });
@@ -72,7 +77,7 @@ describe("override file", () => {
   });
   test("a null override marks a model unpriced", () => {
     setConfigDir("nulling");
-    writeFileSync(join(process.env.OMARCHY_AGENTS_CONFIG!, "pricing.json"), JSON.stringify({ "gpt-5": null }));
+    writeFileSync(join(process.env.OMARCHY_AGENTS_CONFIG!, "pricing.json"), JSON.stringify({ "gpt-5.6-sol": null }));
     expect(ratesForModel("gpt-5.6-sol")).toBeNull();
   });
   test("a broken override file is reported and never blocks built-ins", () => {

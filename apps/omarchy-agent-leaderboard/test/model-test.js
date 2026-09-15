@@ -207,4 +207,60 @@ assertEqual(M.dayLabel("2026-08-15", true), "Today", "today's column is labeled 
 const overridden = M.rankRecords(records, "today", { pricingOverrides: { "deepseek-v4-pro": { inputPerMtok: 10, outputPerMtok: 20 } } })
 assert(overridden.rows[0].cost > 50, "pricing override takes effect in rankRecords")
 
+// Router provider prefixes strip down to the underlying model id.
+assertEqual(M.normalizeModel("cheaper-inference/gpt-6-astra"), "gpt-6-astra", "cheaper-inference prefix strips")
+assertEqual(M.normalizeModel("venice/stealth-ox-alpha"), "ox-alpha", "stealth- prefix strips")
+assertEqual(M.normalizeModel("openrouter/openai/o4-mini"), "o4-mini", "nested provider prefixes strip")
+assertEqual(M.normalizeModel("openrouter/minimax-m3:free"), "minimax-m3", "free marker strips")
+assertEqual(M.normalizeModel("nous/hy3:free"), "hy3", "hy3's free marker strips")
+assertEqual(M.normalizeModel("gmicloud/DeepSeek-V4-Pro"), "deepseek-v4-pro", "case and provider strip together")
+assert(M.ratesForModel("cursor-grok-4.5-high"), "cursor grok keys price")
+assertEqual(M.ratesForModel("cursor-grok-4.5-high").outputPerMtok, 6, "cursor grok keys price at grok rates")
+
+// Frontier models carry their own rates instead of falling back to gpt-5.
+const astra = M.ratesForModel("gpt-6-astra")
+assertEqual(astra.inputPerMtok, 10, "astra input rate")
+assertEqual(astra.outputPerMtok, 50, "astra output rate")
+assertEqual(astra.cacheReadPerMtok, 1, "astra cache read rate")
+assertEqual(astra.cacheWritePerMtok, 12.5, "astra cache write rate")
+assertEqual(M.ratesForModel("gpt-5.6-sol").inputPerMtok, 4, "5.6 sol input rate")
+assertEqual(M.ratesForModel("gpt-5.6-sol").outputPerMtok, 20, "5.6 sol output rate")
+assertEqual(M.ratesForModel("gpt-5.6-terra").outputPerMtok, 12, "5.6 terra output rate")
+assertEqual(M.ratesForModel("gpt-5.6-luna").outputPerMtok, 1.2, "5.6 luna output rate")
+assertEqual(M.ratesForModel("claude-fable-5").inputPerMtok, 10, "fable input rate")
+assertEqual(M.ratesForModel("claude-fable-5").outputPerMtok, 50, "fable output rate")
+assert(M.ratesForModel("cheaper-inference/gpt-6-astra"), "cheaper-inference astra key is priced")
+assertEqual(M.ratesForModel("cheaper-inference/gpt-6-astra").outputPerMtok, 50, "cheaper-inference key prices at astra rates")
+assert(M.ratesForModel("gpt-5.3-codex"), "older gpt-5.x still matches the gpt-5 bucket")
+
+// Cost sort: expensive frontier models outrank cheap bulk token volume.
+const frontierBulk = [
+  {
+    id: "bulk", name: "Bulk", todayTotalTokens: 9_000_000,
+    recentDays: [], modelUsage: { "deepseek-v4-flash": { inputTokens: 9_000_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } }
+  },
+  {
+    id: "frontier", name: "Frontier", todayTotalTokens: 1_000_000,
+    recentDays: [], modelUsage: { "gpt-6-astra": { inputTokens: 1_000_000, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } }
+  }
+]
+const byTokens = M.rankRecords(frontierBulk, "today")
+assertEqual(byTokens.basis, "tokens", "sort basis defaults to tokens")
+assertEqual(byTokens.rows[0].providerId, "bulk", "token sort keeps bulk volume first")
+assertEqual(byTokens.rows[0].share > byTokens.rows[1].share, true, "token share favors the bulk agent")
+
+const byCost = M.rankRecords(frontierBulk, "today", { sortMode: "cost" })
+assertEqual(byCost.basis, "cost", "sort basis flips to cost")
+assertEqual(byCost.rows[0].providerId, "frontier", "cost sort puts the frontier model first")
+assertEqual(byCost.rows[1].providerId, "bulk", "cheap bulk volume drops below astra")
+assertEqual(byCost.rows[0].bar, 1, "cost leader bar is full")
+assert(byCost.rows[1].bar < 1, "cheap agent bar shrinks under cost sort")
+assertEqual(byCost.rows[0].share > byCost.rows[1].share, true, "cost share favors astra")
+assertEqual(M.heroMeta(byCost, "today"), "Today by cost · $12.52 (10M tokens) · Frontier", "cost hero features spend")
+assertEqual(M.barTooltip(byCost, "today"), "Frontier leads today by cost · $10.00 (est.)", "cost tooltip features spend")
+
+const modelByCost = M.rankByModel(frontierBulk, "all", { sortMode: "cost" })
+assertEqual(modelByCost.basis, "cost", "model view honors cost sort")
+assertEqual(modelByCost.rows[0].providerId, "gpt-6-astra", "model view ranks astra above deepseek by cost")
+
 console.log("ok")

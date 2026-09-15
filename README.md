@@ -1,5 +1,7 @@
 # Omarchy Agents
 
+[![Built for Omarchy: Plugin](https://raw.githubusercontent.com/tcballard/omarchy-badges/75975e5b5bf75e7ede3764bcd2950046f7abfe2c/badges/v1/omarchy-plugin.svg)](https://github.com/tcballard/omarchy-badges)
+
 Dashboards and bar widgets for tracking AI coding-agent usage on [Omarchy](https://omarchy.org).
 
 - **Web dashboard** (`apps/web`) — a local-first Bun + Hono + React + SQLite console with provider standings, trends, redacted transcript search, and a citation-bound local analyst. Its Cloudflare Access–gated limits portal now has four operational tabs: limits (with depletion forecasting and a lockout-alert inbox), descriptive token/productivity comparisons, cached GitHub/Linear source synchronization, and activity detail for inspecting public commits and completed tasks. The Analyst page also provides local prompt analysis: it scores task complexity, explains required capabilities, and compares model/provider cost, latency, confidence, and fallback fit without changing configuration. Remotely reachable through Cloudflare Tunnel with Access-gated authentication — see it running at [agents.harlanljones.com](https://agents.harlanljones.com).

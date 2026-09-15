@@ -44,14 +44,14 @@ export function formatDuration(ms: number) {
 
 export type Notifier = (title: string, body: string) => Promise<boolean>;
 
-export const notifyDesktop: Notifier = async (title, body) => {
-  try {
-    const proc = Bun.spawn(["notify-send", "-a", "omarchy-agents", "-t", "10000", title, body], { stdout: "ignore", stderr: "ignore" });
-    return await proc.exited === 0;
-  } catch {
-    return false;
-  }
-};
+// Desktop notifications for usage monitoring were removed: the threshold and
+// forecast alerts fired far too often (every 80/90/100% crossing plus a
+// two-sample linear projection) and the forecast math was not trustworthy.
+// Kept as a no-op for API compatibility; observeUsageRecords() defaults to
+// noopNotify below so production never delivers.
+export const noopNotify: Notifier = async (_title, _body) => false;
+
+export const notifyDesktop: Notifier = noopNotify;
 
 export const RETENTION_MS = 90 * 24 * 3600_000;
 const SNAPSHOT_THROTTLE_MS = 60_000;
@@ -104,19 +104,10 @@ function firingAlerts(records: UsageRecord[], now: number, forecasts: Map<string
         fired.push({ id: alertId(record.id, w.label, w.resetsAt, rule), provider: record.id, providerName, rule, severity, windowLabel: w.label, resetsAt: w.resetsAt, message });
       }
 
-    for (const forecast of forecasts.get(record.id)?.forecasts ?? []) {
-      if (!forecast.sufficient || !forecast.projectedExhaustionAt || !forecast.resetsAt) continue;
-      if (new Date(forecast.projectedExhaustionAt).valueOf() >= new Date(forecast.resetsAt).valueOf()) continue;
-      const w = windowsOf(record).find(x => x.label === forecast.windowLabel);
-      if (!w || awaitingRefresh(w, now) || w.used >= 1) continue;
-      fired.push({
-        id: alertId(record.id, forecast.windowLabel, forecast.resetsAt, "projected-exhaustion"),
-        provider: record.id, providerName,
-        rule: "projected-exhaustion", severity: "warning",
-        windowLabel: forecast.windowLabel, resetsAt: forecast.resetsAt,
-        message: `${w.title} projects 100% by ${new Date(forecast.projectedExhaustionAt).toLocaleString()} (${pct(forecast.ratePerHour ?? 0)}%/h over ${forecast.samples} samples) — before its reset.`,
-      });
-    }
+    // Projected-exhaustion forecasting was removed: extrapolating 100% from
+    // two limit snapshots produced noise, not signal. The forecasts map is
+    // accepted for signature compatibility and ignored.
+    void forecasts;
   }
   return fired;
 }
@@ -135,28 +126,22 @@ export function recordSnapshots(records: UsageRecord[], now = Date.now()): numbe
 }
 
 export function forecastsFor(records: UsageRecord[], now = Date.now()): ForecastView[] {
+  // Depletion forecasting was removed (see firingAlerts): the two-sample
+  // linear extrapolation cried wolf. Every window reports insufficient data
+  // so the UI shows no projection instead of a bad one. Snapshots are still
+  // recorded above for the actual-reset detector.
+  void now;
   const out: ForecastView[] = [];
   for (const record of records) {
-    const windows = windowsOf(record);
     const seen = new Set<string>();
-    for (const w of windows) {
+    for (const w of windowsOf(record)) {
       const cycleKey = `${w.label}|${w.resetsAt}`;
       if (seen.has(cycleKey)) continue;
       seen.add(cycleKey);
-      const base = { providerId: record.id, providerName: record.name ?? record.id, windowLabel: w.label, kind: w.kind, resetsAt: w.resetsAt };
-      if (!w.resetsAt || new Date(w.resetsAt).valueOf() <= now) { out.push({ ...base, samples: 0, sufficient: false, ratePerHour: null, projectedExhaustionAt: null }); continue; }
-      const samples = db.query("SELECT used,recorded_at FROM limit_snapshots WHERE provider=? AND window_label=? AND resets_at=? ORDER BY recorded_at ASC").all(record.id, w.label, w.resetsAt) as Array<{ used: number; recorded_at: string }>;
-      if (samples.length < 2) { out.push({ ...base, samples: samples.length, sufficient: false, ratePerHour: null, projectedExhaustionAt: null }); continue; }
-      const firstRow = samples[0], lastRow = samples[samples.length - 1];
-      const spanMs = new Date(lastRow.recorded_at).valueOf() - new Date(firstRow.recorded_at).valueOf();
-      const lastUsed = Number(lastRow.used);
-      const ratePerMs = spanMs > 0 ? (lastUsed - Number(firstRow.used)) / spanMs : 0;
-      if (!(ratePerMs > 0)) { out.push({ ...base, samples: samples.length, sufficient: false, ratePerHour: 0, projectedExhaustionAt: null }); continue; }
-      const projectedMs = new Date(lastRow.recorded_at).valueOf() + (1 - lastUsed) / ratePerMs;
       out.push({
-        ...base, samples: samples.length, sufficient: true,
-        ratePerHour: ratePerMs * 3600_000,
-        projectedExhaustionAt: new Date(projectedMs).toISOString(),
+        providerId: record.id, providerName: record.name ?? record.id,
+        windowLabel: w.label, kind: w.kind, resetsAt: w.resetsAt,
+        samples: 0, sufficient: false, ratePerHour: null, projectedExhaustionAt: null,
       });
     }
   }
@@ -165,7 +150,7 @@ export function forecastsFor(records: UsageRecord[], now = Date.now()): Forecast
 
 export type ObservationResult = { snapshotsWritten: number; alertsFired: number; alertsResolved: number; notificationsSent: number; notificationsFailed: number };
 
-export async function observeUsageRecords(records: UsageRecord[], now = Date.now(), notify: Notifier = notifyDesktop): Promise<ObservationResult> {
+export async function observeUsageRecords(records: UsageRecord[], now = Date.now(), notify?: Notifier): Promise<ObservationResult> {
   const snapshotsWritten = recordSnapshots(records, now);
   const cutoff = new Date(now - RETENTION_MS).toISOString();
   db.query("DELETE FROM limit_snapshots WHERE recorded_at < ?").run(cutoff);
@@ -183,7 +168,11 @@ export async function observeUsageRecords(records: UsageRecord[], now = Date.now
   const active = new Map((db.query("SELECT * FROM usage_alerts WHERE resolved_at IS NULL").all() as any[]).map(row => [String(row.id), row]));
   const seen = new Set<string>();
   const nowIso = new Date(now).toISOString();
+  // No notifier means no delivery: the production caller (indexer) passes
+  // none, so usage monitoring records alerts without desktop spam. An
+  // explicitly passed notifier (tests, manual runs) is still honored.
   const deliver = async (title: string, body: string): Promise<boolean> => {
+    if (!notify) return false;
     const sent = await notify(title, body);
     sent ? result.notificationsSent++ : result.notificationsFailed++;
     return sent;
@@ -282,32 +271,10 @@ export type ForecastAccuracy = { providerId: string; windowLabel: string; window
 // Re-derives what forecastsFor() would have projected from only the first two
 // samples of a reset cycle, then compares that early call against the sample
 // where usage actually reached 100% in the same cycle.
+// Removed with depletion forecasting: always empty, kept for API compatibility.
 export function forecastAccuracy(limit = 50): ForecastAccuracy[] {
-  const rows = db.query("SELECT provider,window_label,window_kind,resets_at,used,recorded_at FROM limit_snapshots ORDER BY provider,window_label,resets_at,recorded_at").all() as SnapshotRow[];
-  const cycles = new Map<string, SnapshotRow[]>();
-  for (const row of rows) {
-    const key = `${row.provider} ${row.window_label} ${row.resets_at ?? ""}`;
-    const bucket = cycles.get(key);
-    if (bucket) bucket.push(row); else cycles.set(key, [row]);
-  }
-  const out: ForecastAccuracy[] = [];
-  for (const samples of cycles.values()) {
-    const exhaustedIndex = samples.findIndex(s => s.used >= 1);
-    if (exhaustedIndex < 2) continue;
-    const [firstRow, secondRow] = samples;
-    const spanMs = new Date(secondRow.recorded_at).valueOf() - new Date(firstRow.recorded_at).valueOf();
-    if (!(spanMs > 0)) continue;
-    const ratePerMs = (secondRow.used - firstRow.used) / spanMs;
-    if (!(ratePerMs > 0)) continue;
-    const predictedMs = new Date(secondRow.recorded_at).valueOf() + (1 - secondRow.used) / ratePerMs;
-    const actual = samples[exhaustedIndex];
-    out.push({
-      providerId: actual.provider, windowLabel: actual.window_label, windowKind: actual.window_kind,
-      predictedExhaustionAt: new Date(predictedMs).toISOString(), actualExhaustionAt: actual.recorded_at,
-      driftMs: new Date(actual.recorded_at).valueOf() - predictedMs,
-    });
-  }
-  return out.sort((a, b) => b.actualExhaustionAt.localeCompare(a.actualExhaustionAt)).slice(0, limit);
+  void limit;
+  return [];
 }
 
 export function incidentsView(records?: UsageRecord[], now = Date.now(), limit = 100): IncidentsResponse {
@@ -338,14 +305,7 @@ export function incidentsView(records?: UsageRecord[], now = Date.now(), limit =
       : "No predicted reset time on record for comparison.",
   }));
 
-  const accuracy: IncidentView[] = forecastAccuracy(limit).map(f => ({
-    id: `forecast:${f.providerId}:${f.windowLabel}:${f.actualExhaustionAt}`, kind: "forecast-accuracy", occurredAt: f.actualExhaustionAt,
-    providerId: f.providerId, providerName: nameOf(f.providerId),
-    summary: `${f.windowLabel} exhaustion forecast drift ${formatDuration(Math.abs(f.driftMs ?? 0))}`,
-    detail: `Projected exhaustion ${f.predictedExhaustionAt ? new Date(f.predictedExhaustionAt).toLocaleString() : "unknown"}; actual ${new Date(f.actualExhaustionAt).toLocaleString()}.`,
-  }));
-
-  const incidents = [...thresholds, ...switches, ...resets, ...accuracy]
+  const incidents = [...thresholds, ...switches, ...resets]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
     .slice(0, limit);
   return { generatedAt: new Date(now).toISOString(), incidents };

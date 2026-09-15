@@ -54,22 +54,21 @@ describe("threshold crossing", () => {
 
     await watch.observeUsageRecords([claudeAt(0.85)], NOW + 3600_000, spy.notify);
     let inbox = watch.alertsInbox([claudeAt(0.85)], NOW + 3600_000);
-    // The 0.5 -> 0.85 jump projects exhaustion before the reset, so both the
-    // threshold and the projection arm together.
-    expect(inbox.active.map(a => a.rule).sort()).toEqual(["projected-exhaustion", "threshold-20"]);
-    expect(spy.calls).toHaveLength(2);
+    // Depletion forecasting was removed: only the threshold arm fires.
+    expect(inbox.active.map(a => a.rule).sort()).toEqual(["threshold-20"]);
+    expect(spy.calls).toHaveLength(1);
     expect(spy.calls.find(c => c.body.includes("under 20% remains"))).toBeTruthy();
 
     // Same observation again: deduplicated, no further notifications.
     await watch.observeUsageRecords([claudeAt(0.85)], NOW + 3600_000 + 120_000, spy.notify);
-    expect(watch.alertsInbox([], NOW).active).toHaveLength(2);
-    expect(spy.calls).toHaveLength(2);
+    expect(watch.alertsInbox([], NOW).active).toHaveLength(1);
+    expect(spy.calls).toHaveLength(1);
 
     // Crossing 90% adds the tighter rule without resolving anything else.
     await watch.observeUsageRecords([claudeAt(0.95)], NOW + 7200_000, spy.notify);
     inbox = watch.alertsInbox([claudeAt(0.95)], NOW + 7200_000);
-    expect(inbox.active.map(a => a.rule).sort()).toEqual(["projected-exhaustion", "threshold-10", "threshold-20"]);
-    expect(spy.calls).toHaveLength(3);
+    expect(inbox.active.map(a => a.rule).sort()).toEqual(["threshold-10", "threshold-20"]);
+    expect(spy.calls).toHaveLength(2);
   });
 
   test("exhaustion replaces thresholds as critical", async () => {
@@ -119,8 +118,7 @@ describe("reset rollover", () => {
   });
 });
 
-describe("notification failure", () => {
-  test("failed deliveries retry on the next pass and gate recovery notices", async () => {
+describe("notification failure", () => {  test("failed deliveries retry on the next pass and gate recovery notices", async () => {
     wipe();
     const spy = spyNotifier();
     spy.failing = true;
@@ -144,6 +142,17 @@ describe("notification failure", () => {
     const recent = watch.alertsInbox([], NOW + 360_000).recent;
     expect(recent).toHaveLength(1);
     expect(recent[0].resolvedAt).toBeTruthy();
+  });
+
+  test("the production default delivers no desktop notifications", async () => {
+    wipe();
+    // No notifier passed: the indexer calls observeUsageRecords(observed) the
+    // same way, so this must record the alert without any delivery attempt.
+    const result = await watch.observeUsageRecords([claudeAt(0.95)], NOW);
+    expect(result.alertsFired).toBe(2);
+    expect(result.notificationsSent).toBe(0);
+    expect(result.notificationsFailed).toBe(0);
+    expect(activeAlerts().map(a => a.rule).sort()).toEqual(["threshold-10", "threshold-20"]);
   });
 });
 
@@ -174,26 +183,23 @@ describe("stale and auth states", () => {
 });
 
 describe("depletion forecasting", () => {
-  test("needs multiple samples in the same reset cycle", async () => {
+  test("forecasting is disabled: windows never project exhaustion", async () => {
     wipe();
     const spy = spyNotifier();
     const first = claudeAt(0.5);
     await watch.observeUsageRecords([first], NOW, spy.notify);
     let inbox = watch.alertsInbox([first], NOW);
     expect(inbox.forecasts.map(f => f.sufficient)).toEqual([false]);
-    expect(inbox.forecasts[0].samples).toBe(1);
+    expect(inbox.forecasts[0].samples).toBe(0);
     expect(inbox.active).toHaveLength(0);
 
     const second = claudeAt(0.6);
     await watch.observeUsageRecords([second], NOW + 3600_000, spy.notify);
     inbox = watch.alertsInbox([second], NOW + 3600_000);
-    const forecast = inbox.forecasts[0];
-    expect(forecast.sufficient).toBe(true);
-    expect(forecast.samples).toBe(2);
-    expect(forecast.projectedExhaustionAt).toBeTruthy();
-    expect(new Date(forecast.projectedExhaustionAt!).valueOf())
-      .toBeLessThan(new Date(first.limits![0].resetsAt!).valueOf());
-    expect(inbox.active.map(a => a.rule)).toEqual(["projected-exhaustion"]);
+    // Even with multiple samples the forecaster stays insufficient and no
+    // projected-exhaustion alert fires.
+    expect(inbox.forecasts.map(f => f.sufficient)).toEqual([false]);
+    expect(inbox.active).toHaveLength(0);
   });
 
   test("flat or falling usage never projects exhaustion", async () => {
@@ -255,21 +261,16 @@ describe("incident view (Phase 3)", () => {
     expect(watch.actualResets()).toHaveLength(0);
   });
 
-  test("forecast accuracy compares an early two-sample projection against actual exhaustion", async () => {
+  test("forecast accuracy is disabled along with the forecaster", async () => {
     wipe();
     const spy = spyNotifier();
     const cycleReset = hoursFromNow(100);
     await watch.observeUsageRecords([claudeAt(0.5, cycleReset)], NOW, spy.notify);
     await watch.observeUsageRecords([claudeAt(0.6, cycleReset)], NOW + 3600_000, spy.notify);
     await watch.observeUsageRecords([claudeAt(1, cycleReset)], NOW + 4 * 3600_000, spy.notify);
-    const accuracy = watch.forecastAccuracy();
-    expect(accuracy).toHaveLength(1);
-    expect(accuracy[0].providerId).toBe("claude");
-    expect(accuracy[0].actualExhaustionAt).toBe(hoursFromNow(4));
-    expect(accuracy[0].predictedExhaustionAt).toBeTruthy();
-    expect(accuracy[0].driftMs).not.toBeNull();
+    expect(watch.forecastAccuracy()).toEqual([]);
     const inbox = watch.incidentsView([], NOW + 4 * 3600_000);
-    expect(inbox.incidents.some(i => i.kind === "forecast-accuracy")).toBe(true);
+    expect(inbox.incidents.some(i => i.kind === "forecast-accuracy")).toBe(false);
   });
 
   test("incidents merge threshold crossings, switches, resets, and accuracy in one recency-ordered feed", async () => {

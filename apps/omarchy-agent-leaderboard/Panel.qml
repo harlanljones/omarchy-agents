@@ -30,11 +30,21 @@ Panel {
     if (value === "model") return value
     return "provider"
   }
+  property string sortMode: {
+    var value = String(setting("sortMode", "tokens"))
+    if (value === "cost") return value
+    return "tokens"
+  }
   property string selectedProviderId: ""
   property bool cursorActive: false
   property double nowMs: Date.now()
 
-  readonly property var effectiveSettings: Object.assign({}, root.settings, { pricingOverrides: usage.pricingOverrides })
+  readonly property var effectiveSettings: Object.assign({}, root.settings, {
+    pricingOverrides: usage.pricingOverrides,
+    sortMode: root.sortMode
+  })
+
+  readonly property bool byCost: root.sortMode === "cost"
 
   readonly property var board: {
     var rev = usage.dataRevision
@@ -426,6 +436,41 @@ Panel {
             }
           }
 
+          Row {
+            id: sortSwitch
+            width: parent.width
+            spacing: Style.spacing.md
+
+            readonly property var options: Model.sortOptions()
+            readonly property real cellWidth: options.length > 0
+              ? (width - spacing * (options.length - 1)) / options.length
+              : 0
+
+            Repeater {
+              model: sortSwitch.options
+
+              Button {
+                required property var modelData
+                required property int index
+
+                width: sortSwitch.cellWidth
+                text: modelData.label
+                selected: modelData.value === root.sortMode
+                hasCursor: root.cursorActive && modelData.value === root.sortMode
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                verticalPadding: Style.spacing.controlPaddingY
+                onClicked: {
+                  root.cursorActive = true
+                  root.sortMode = modelData.value
+                }
+                onHovered: function(isHovered) { if (isHovered) root.cursorActive = true }
+              }
+            }
+          }
+
           Text {
             visible: root.standings.length === 0
             width: parent.width
@@ -635,9 +680,10 @@ Panel {
       id: costLabel
       visible: rankRow.row && rankRow.row.cost > 0
       text: rankRow.row ? Model.formatCost(rankRow.row.cost) : ""
-      color: root.dim
+      color: root.byCost ? root.foreground : root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
+      font.bold: root.byCost
       width: Style.space(48)
       horizontalAlignment: Text.AlignRight
       anchors.right: shareLabel.left
@@ -664,7 +710,7 @@ Panel {
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
-      font.bold: true
+      font.bold: !root.byCost
       width: Style.space(46)
       horizontalAlignment: Text.AlignRight
       anchors.right: parent.right
