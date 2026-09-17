@@ -232,6 +232,8 @@ assertEqual(M.ratesForModel("claude-fable-5").outputPerMtok, 50, "fable output r
 assert(M.ratesForModel("cheaper-inference/gpt-6-astra"), "cheaper-inference astra key is priced")
 assertEqual(M.ratesForModel("cheaper-inference/gpt-6-astra").outputPerMtok, 50, "cheaper-inference key prices at astra rates")
 assert(M.ratesForModel("gpt-5.3-codex"), "older gpt-5.x still matches the gpt-5 bucket")
+assert(M.ratesForModel("meta/muse-spark-1.3-contributor"), "command code muse-spark key is priced")
+assertEqual(M.ratesForModel("meta/muse-spark-1.3-contributor").outputPerMtok, 4.25, "command code key prices at muse-spark rates")
 
 // Cost sort: expensive frontier models outrank cheap bulk token volume.
 const frontierBulk = [

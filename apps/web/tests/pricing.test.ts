@@ -37,6 +37,7 @@ describe("built-in rates", () => {
     expect(ratesForModel("grok-4.6")?.match).toBe("grok");
     expect(ratesForModel("gpt-oss-20b")?.match).toBe("gpt-oss");
     expect(ratesForModel("o4-mini")?.match).toBe("o4");
+    expect(ratesForModel("meta/muse-spark-1.3-contributor")?.match).toBe("muse-spark");
   });
   test("vendor prefixes and casings are normalized away", () => {
     expect(normalizeModel("@cf/deepseek-ai/deepseek-v4-flash-0731")).toBe("deepseek-ai/deepseek-v4-flash-0731");

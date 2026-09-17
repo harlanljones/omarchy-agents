@@ -5,6 +5,7 @@ export const colors: Record<string, string> = {
   antigravity: "#4285f4",
   fireworks: "#ff7830",
   opencode: "#bd85f2",
+  commandcode: "#f472b6",
   evot: "#38bdf8",
 };
 

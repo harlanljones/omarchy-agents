@@ -24,6 +24,7 @@ colors:
   provider-antigravity: "#4285f4"
   provider-fireworks: "#ff7830"
   provider-opencode: "#bd85f2"
+  provider-commandcode: "#f472b6"
   provider-evot: "#38bdf8"
   provider-fallback: "#64748b"
   scrollbar: "#26303d"

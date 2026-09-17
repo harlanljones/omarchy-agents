@@ -247,6 +247,67 @@ export function parseEvot(provider: string, path: string, content: string): { se
   return base;
 }
 
+// Command Code writes one JSONL file per session under
+// `projects/<slug>/<sessionId>.jsonl`. Each session opens with a `session`
+// line ({ id, timestamp, cwd }) and every later line is a `message` entry:
+// assistant messages carry the model id plus a per-request `usage` block of
+// { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }, user
+// messages carry either a `text` prompt or `tool_result` blocks answering an
+// earlier `tool_use`. Usage attribution therefore reads per assistant
+// message (never a cumulative session counter), so mid-session model
+// switches are handled correctly.
+export function parseCommandCode(provider: string, path: string, content: string): { session: Session; events: Event[] } | null {
+  const fallbackTime = statSync(path).mtime.toISOString();
+  const sessionHeader = content.split(/\r?\n/).map(line => {
+    try { return JSON.parse(line); } catch { return null; }
+  }).find(entry => entry && typeof entry === "object" && entry.type === "session") ?? {};
+  const sourceKey = `${provider}:${path}`;
+  const sessionId = String(sessionHeader.id ?? id(sourceKey));
+  const project = first(sessionHeader.cwd, dirname(dirname(path)).split("/").at(-1)) ?? null;
+  const raws: any[] = [];
+  for (const line of content.split(/\r?\n/).filter(Boolean)) {
+    let entry: any; try { entry = JSON.parse(line); } catch { continue; }
+    if (!entry || typeof entry !== "object" || entry.type !== "message") continue;
+    const message = obj(entry.message);
+    // The harness records cache tokens exactly where every other intake
+    // expects them; rename the keys so jsonlTokenTotals() sums them.
+    const usage = obj(entry.usage);
+    const normalizedUsage = Object.keys(usage).length ? {
+      input_tokens: usage.inputTokens,
+      output_tokens: usage.outputTokens,
+      cache_read_input_tokens: usage.cacheReadTokens,
+      cache_creation_input_tokens: usage.cacheWriteTokens,
+    } : undefined;
+    // One assistant message can fan out into several blocks (text plus a
+    // tool_use each). Every block shares the message id so jsonlTokenTotals()
+    // dedupes them and the per-request usage is counted exactly once.
+    const blockId = String(entry.id ?? `${sessionId}:${raws.length}`);
+    if (message.role === "assistant") {
+      for (const block of Array.isArray(message.content) ? message.content : [message.content]) {
+        const part = obj(block);
+        if (part.type === "tool_use") {
+          raws.push({ id: blockId, role: "tool", content: part.input ?? {}, name: part.name, model: entry.model, usage: normalizedUsage, timestamp: entry.timestamp });
+        } else if (part.type === "text" && part.text) {
+          raws.push({ id: blockId, role: "assistant", content: part.text, model: entry.model, usage: normalizedUsage, timestamp: entry.timestamp });
+        } else if (part.type === "thinking" && part.thinking) {
+          raws.push({ id: blockId, role: "assistant", content: part.thinking, model: entry.model, timestamp: entry.timestamp });
+        }
+      }
+    } else if (message.role === "user") {
+      for (const block of Array.isArray(message.content) ? message.content : [message.content]) {
+        const part = obj(block);
+        if (part.type === "tool_result") {
+          raws.push({ id: blockId, role: "tool_result", content: part.content, timestamp: entry.timestamp });
+        } else if (part.type === "text" && part.text) {
+          raws.push({ id: blockId, role: "user", content: part.text, timestamp: entry.timestamp });
+        }
+      }
+    }
+  }
+  if (!raws.length) return null;
+  return buildSession(provider, raws, { sessionId, project, path, sourceKey, fallbackTime, format: "commandcode-jsonl" });
+}
+
 // --- registry ---
 
 export interface IntakeRoot {
@@ -303,6 +364,19 @@ export const PROVIDERS: ProviderIntake[] = [
   },
   // OpenCode is indexed through its sqlite store, not file walking (see indexOpenCode).
   { id: "opencode", name: "OpenCode", roots: [{ path: `${home}/.local/share/opencode`, kinds: [".json", ".jsonl"] }] },
+  // Command Code is subscription-billed with no rate-limit API, so it stays
+  // token-only like pi: usage is indexed from its session transcripts and
+  // priced at hosted reference rates for comparison.
+  {
+    id: "commandcode",
+    name: "Command Code",
+    roots: [{
+      path: `${home}/.commandcode/projects`,
+      kinds: [".jsonl"],
+      match: p => !/\.checkpoints\.jsonl$/.test(p),
+    }],
+    parse: parseCommandCode,
+  },
   // Fireworks is usage-collector only: no transcript store, so it stays metrics-only
   // and intentionally has no intake.
   { id: "fireworks", name: "Fireworks" },

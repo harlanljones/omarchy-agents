@@ -22,6 +22,7 @@
       "providers": {
         "claude": { "enabled": true },
         "codex": { "enabled": true },
+        "commandcode": { "enabled": true },
         "fireworks": { "enabled": true },
         "grok": { "enabled": false },
         "opencode": { "enabled": true }

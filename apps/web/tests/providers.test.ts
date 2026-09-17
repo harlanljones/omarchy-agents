@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import * as providerModule from "../src/server/providers";
 
-const { PROVIDERS, isIndexed, parseCline, parseAntigravity, parseJsonl } = providerModule;
+const { PROVIDERS, isIndexed, parseCline, parseAntigravity, parseCommandCode, parseJsonl } = providerModule;
 
 describe("provider registry", () => {
   test("coverage is derived from the registry, not a hardcoded list", () => {
@@ -12,6 +12,7 @@ describe("provider registry", () => {
     expect(isIndexed("codex")).toBe(true);
     expect(isIndexed("cline")).toBe(true);
     expect(isIndexed("antigravity")).toBe(true);
+    expect(isIndexed("commandcode")).toBe(true);
     expect(isIndexed("evot")).toBe(true);
     // OpenCode exposes a cursor-based indexer; simulate the wiring done in indexer.ts.
     PROVIDERS.find(p => p.id === "opencode")!.index = () => {};
@@ -156,6 +157,52 @@ describe("Antigravity JSONL intake adapter", () => {
     const root = PROVIDERS.find(p => p.id === "antigravity")!.roots![0];
     expect(root.match!(join(logs, "transcript.jsonl"))).toBe(true);
     expect(root.match!(join(chunks, "transcript.jsonl"))).toBe(false);
+  });
+});
+
+describe("Command Code JSONL intake adapter", () => {
+  test("maps session/message lines into usage, model, and project", () => {
+    const dir = mkdtempSync(join(tmpdir(), "commandcode-intake-"));
+    const sessionDir = join(dir, "projects", "home-harlan-dev-demo");
+    mkdirSync(sessionDir, { recursive: true });
+    const path = join(sessionDir, "session-1.jsonl");
+    writeFileSync(path, [
+      JSON.stringify({ type: "session", version: 3, id: "session-1", timestamp: "2026-09-16T10:00:00Z", cwd: "/work/demo" }),
+      JSON.stringify({ type: "message", id: "m1", timestamp: "2026-09-16T10:01:00Z", model: "meta/muse-spark-1.3-contributor", message: { role: "user", content: [{ type: "text", text: "do the thing" }] } }),
+      JSON.stringify({ type: "message", id: "m2", timestamp: "2026-09-16T10:02:00Z", model: "meta/muse-spark-1.3-contributor", usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 40, cacheWriteTokens: 5 }, message: { role: "assistant", content: [{ type: "tool_use", id: "call-1", name: "read_file", input: { path: "/work/demo" } }] } }),
+      JSON.stringify({ type: "message", id: "m3", timestamp: "2026-09-16T10:03:00Z", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "call-1", content: [{ type: "text", text: "file contents" }] }] } }),
+    ].join("\n"));
+    const result = parseCommandCode("commandcode", path, readFileSync(path, "utf8"))!;
+    expect(result).not.toBeNull();
+    expect(result.session.id).toBe("session-1");
+    expect(result.session.project).toBe("/work/demo");
+    expect(result.session.model).toBe("meta/muse-spark-1.3-contributor");
+    expect(result.session.tokenInput).toBe(100);
+    expect(result.session.tokenOutput).toBe(20);
+    expect(result.session.cacheRead).toBe(40);
+    expect(result.session.cacheWrite).toBe(5);
+    expect(result.session.toolCount).toBe(1);
+    expect(result.events.map(e => e.kind)).toEqual(["prompt", "tool_call", "tool_result"]);
+  });
+
+  test("counts one multi-block assistant message once", () => {
+    const dir = mkdtempSync(join(tmpdir(), "commandcode-fanout-"));
+    const sessionDir = join(dir, "projects", "proj");
+    mkdirSync(sessionDir, { recursive: true });
+    const path = join(sessionDir, "s.jsonl");
+    writeFileSync(path, [
+      JSON.stringify({ type: "session", version: 3, id: "s", timestamp: "2026-09-16T10:00:00Z", cwd: "/work" }),
+      JSON.stringify({ type: "message", id: "m1", timestamp: "2026-09-16T10:01:00Z", model: "meta/muse-spark-1.3-contributor", usage: { inputTokens: 50, outputTokens: 10, cacheReadTokens: 5, cacheWriteTokens: 0 }, message: { role: "assistant", content: [{ type: "tool_use", id: "a", name: "read_file", input: {} }, { type: "tool_use", id: "b", name: "glob", input: {} }] } }),
+    ].join("\n"));
+    const result = parseCommandCode("commandcode", path, readFileSync(path, "utf8"))!;
+    expect(result.session.tokenInput).toBe(50);
+    expect(result.session.tokenOutput).toBe(10);
+  });
+
+  test("root match filter skips checkpoint sidecars", () => {
+    const root = PROVIDERS.find(p => p.id === "commandcode")!.roots![0];
+    expect(root.match!(join("projects", "proj", "s.jsonl"))).toBe(true);
+    expect(root.match!(join("projects", "proj", "s.checkpoints.jsonl"))).toBe(false);
   });
 });
 

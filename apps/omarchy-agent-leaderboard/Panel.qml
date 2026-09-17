@@ -142,6 +142,7 @@ Panel {
     antigravity: true,
     agy: true,
     claude: true,
+    commandcode: true,
     cursor: true,
     codex: true,
     fireworks: true,
@@ -163,6 +164,7 @@ Panel {
     if (id === "cline") return "#6BCB77"
     if (id === "antigravity" || id === "agy") return "#4285F4"
     if (id === "claude") return "#E07A5F"
+    if (id === "commandcode") return "#F472B6"
     if (id === "cursor") return "#EF4444"
     if (id === "fireworks") return "#FBBF24"
     if (id === "hermes") return "#EC4899"

@@ -319,6 +319,21 @@
           "#ffffff"
         ]
       },
+      "provider-commandcode": {
+        "role": "provider",
+        "displayName": "Provider Commandcode",
+        "canonical": "#f472b6",
+        "tonalRamp": [
+          "#000000",
+          "#3d1c2e",
+          "#7a385c",
+          "#b75489",
+          "#f79ec5",
+          "#f9bed8",
+          "#fcdfec",
+          "#ffffff"
+        ]
+      },
       "provider-fallback": {
         "role": "provider",
         "displayName": "Provider Fallback",

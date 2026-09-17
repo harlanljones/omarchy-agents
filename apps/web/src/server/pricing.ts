@@ -32,6 +32,7 @@ const BUILT_IN: TableEntry[] = [
   { match: "minimax", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
   { match: "solar", inputPerMtok: 0.5, outputPerMtok: 1.5, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
   { match: "o4", inputPerMtok: 1.1, outputPerMtok: 4.4, cacheReadPerMtok: 0.11, cacheWritePerMtok: 1.375, asOf: PRICING_AS_OF },
+  { match: "command-code", inputPerMtok: 1.25, outputPerMtok: 4.25, cacheReadPerMtok: 0.15, cacheWritePerMtok: 1.5625, asOf: PRICING_AS_OF },
   { match: "muse-spark", inputPerMtok: 1.25, outputPerMtok: 4.25, cacheReadPerMtok: 0.15, cacheWritePerMtok: 1.5625, asOf: PRICING_AS_OF },
   { match: "coding-kimi", inputPerMtok: 0.95, outputPerMtok: 4, cacheReadPerMtok: 0.19, cacheWritePerMtok: 1.1875, asOf: PRICING_AS_OF },
   { match: "gpt-oss", inputPerMtok: 0.2, outputPerMtok: 0.3, cacheReadPerMtok: 0.02, cacheWritePerMtok: 0.25, asOf: PRICING_AS_OF },

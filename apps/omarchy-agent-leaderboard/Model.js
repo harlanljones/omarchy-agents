@@ -119,6 +119,7 @@ var PRICING_AS_OF = "2026-08-01"
 var FRONTIER_PRICING_AS_OF = "2026-09-10"
 
 var BUILT_IN_PRICING = [
+  { match: "command-code", inputPerMtok: 1.25, outputPerMtok: 4.25, cacheReadPerMtok: 0.15, cacheWritePerMtok: 1.5625, asOf: PRICING_AS_OF },
   { match: "claude-fable", inputPerMtok: 10, outputPerMtok: 50, cacheReadPerMtok: 1, cacheWritePerMtok: 12.5, asOf: FRONTIER_PRICING_AS_OF },
   { match: "claude-opus", inputPerMtok: 5, outputPerMtok: 25, cacheReadPerMtok: 0.5, cacheWritePerMtok: 6.25, asOf: PRICING_AS_OF },
   { match: "claude-sonnet", inputPerMtok: 3, outputPerMtok: 15, cacheReadPerMtok: 0.3, cacheWritePerMtok: 3.75, asOf: PRICING_AS_OF },

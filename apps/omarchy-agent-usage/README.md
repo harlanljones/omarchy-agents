@@ -60,6 +60,7 @@ light surfaces — and the bar glyph stands in when there is none.
 |---|---|---|
 | `claude` | Anthropic's OAuth usage endpoint (5-hour session + 7-day weekly) | `~/.claude/projects` transcripts, opencode sessions on an Anthropic provider, plus `stats-cache.json` and `history.jsonl` as fallback |
 | `codex` | The Codex app-server RPC | native Codex CLI session files (plus pi and opencode sessions) |
+| `commandcode` | None — subscription-billed, token-only | `~/.commandcode/projects` session transcripts (per-message model and usage) |
 | `cursor` | Real Included/Auto/API percentages and billing reset from Cursor Agent's `/usage` view | Cursor chat stores plus real token totals from the `statusLine` hook |
 | `fireworks` | Estimated prepaid balance: configured funding minus rated account costs | Fireworks billing API, grouped by day and model for the last 30 days |
 | `cline` | Estimated from priced transcripts, or real dashboard figures via `/usage` (see below) | `~/.cline/data/sessions` transcripts (per-message token metrics and model attribution) |
@@ -223,6 +224,7 @@ edit `shell.json` directly):
 omarchy bar set omarchy.agents providers '{
   "claude": { "enabled": true },
   "codex": { "enabled": false },
+  "commandcode": { "enabled": true },
   "fireworks": { "enabled": true }
 }' --json
 ```

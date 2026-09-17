@@ -24,7 +24,7 @@ This is an evidence console over local agent activity: it combines the existing 
 
 ## Operating Context
 
-The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, Antigravity, OpenCode, Fireworks, and usage-collector stores, and is reached remotely through Cloudflare Tunnel and Access. Nightly analysis runs at 03:15 local time; refreshes use the fixed `omarchy-agent-usage-update --force` command.
+The app runs on an Omarchy Linux workstation, reads local Claude, Codex, Cline, Antigravity, Command Code, OpenCode, Fireworks, and usage-collector stores, and is reached remotely through Cloudflare Tunnel and Access. Nightly analysis runs at 03:15 local time; refreshes use the fixed `omarchy-agent-usage-update --force` command.
 
 ## Capabilities and Constraints
 

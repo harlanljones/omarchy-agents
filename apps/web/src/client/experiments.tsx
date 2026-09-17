@@ -156,6 +156,7 @@ const formatContribution = (metricKind: MetricKind, value: number) => {
 };
 const providerNames: Record<string, string> = {
   claude: "Claude Code", opencode: "opencode", antigravity: "Antigravity", codex: "Codex",
+  commandcode: "Command Code",
 };
 function ProviderIdentity({ provider }: { provider: string | null }) {
   if (!provider) return <>Unavailable</>;
