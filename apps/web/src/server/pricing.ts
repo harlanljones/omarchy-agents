@@ -28,6 +28,7 @@ const BUILT_IN: TableEntry[] = [
   { match: "grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "cursor-grok", inputPerMtok: 2, outputPerMtok: 6, cacheReadPerMtok: 0.5, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
   { match: "hy3", inputPerMtok: 0.15, outputPerMtok: 0.6, cacheReadPerMtok: 0.015, cacheWritePerMtok: 0.1875, asOf: PRICING_AS_OF },
+  { match: "hy4", inputPerMtok: 0.15, outputPerMtok: 0.6, cacheReadPerMtok: 0.015, cacheWritePerMtok: 0.1875, asOf: PRICING_AS_OF },
   { match: "gemini", inputPerMtok: 0.5, outputPerMtok: 3, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
   { match: "minimax", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
   { match: "solar", inputPerMtok: 0.5, outputPerMtok: 1.5, cacheReadPerMtok: 0.05, cacheWritePerMtok: 0.625, asOf: PRICING_AS_OF },
@@ -39,6 +40,20 @@ const BUILT_IN: TableEntry[] = [
   { match: "ox-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
   { match: "x-preview", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
   { match: "big-pickle", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
+  // Pi's local model key carries its harness suffix (`qwen3.8:pi`); the colon
+  // split keeps the vendor prefix stripper from seeing it, so match the full
+  // local key at the hosted Qwen reference rate for comparison — a notional
+  // figure, not money spent.
+  { match: "qwen3.8:pi", inputPerMtok: 0.55, outputPerMtok: 2.2, cacheReadPerMtok: 0.055, cacheWritePerMtok: 0.55, asOf: PRICING_AS_OF },
+  // Vendor families with no published per-model split stay on the vendor rate
+  // rather than going unpriced. Rates mirror the matching GLM / MiniMax
+  // reference rows and are tagged with the vendor match so the pricing page
+  // shows they are family-level, not model-exact.
+  { match: "step-3", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
+  { match: "z-ai-glm-5-3-flash", inputPerMtok: 0.6, outputPerMtok: 2.5, cacheReadPerMtok: 0.06, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
+  { match: "z-ai/glm-5.3-flash", inputPerMtok: 0.6, outputPerMtok: 2.5, cacheReadPerMtok: 0.06, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
+  { match: "union-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
+  { match: "stealth-ox-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
 ];
 
 // OpenCode (and other routers) store usage per provider/model, so a model key
@@ -47,10 +62,10 @@ const BUILT_IN: TableEntry[] = [
 // (repeatedly, in case providers nest) before matching against the rate table.
 // Longer names must precede shorter ones so `opencode-go/` wins over `opencode/`.
 const PROVIDER_PREFIXES = [
-  "cloudflare-workers-ai", "opencode-go", "cheaper-inference", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
+  "cloudflare-workers-ai", "opencode-go", "cheaper-inference", "cline-pass", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
   "openrouter", "gmicloud", "aerolink", "gorouter", "orcarouter", "nano-gpt", "openai", "anthropic",
   "microsoft", "google", "meta", "models", "freetoken", "opencode", "venice", "nous", "groq", "x-ai",
-  "upstage", "tencent", "bai", "@cf",
+  "upstage", "tencent", "stepfun", "vercel", "omniroute", "ollama-local", "bai", "@cf",
 ];
 const PROVIDER_PREFIX = new RegExp(`^(?:${PROVIDER_PREFIXES.join("|")})/`);
 

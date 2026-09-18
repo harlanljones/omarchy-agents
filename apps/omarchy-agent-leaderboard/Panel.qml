@@ -145,7 +145,6 @@ Panel {
     commandcode: true,
     cursor: true,
     codex: true,
-    fireworks: true,
     grok: true,
     hermes: true,
     opencode: true
@@ -166,8 +165,8 @@ Panel {
     if (id === "claude") return "#E07A5F"
     if (id === "commandcode") return "#F472B6"
     if (id === "cursor") return "#EF4444"
-    if (id === "fireworks") return "#FBBF24"
     if (id === "hermes") return "#EC4899"
+    if (id === "pi") return "#A3A380"
     if (id === "codex") return "#2DD4BF"
     if (id === "opencode") return "#A78BFA"
     if (id === "grok") return "#E6EAF2"
@@ -479,7 +478,7 @@ Panel {
             topPadding: Style.space(12)
             text: root.hasUsage
               ? "No tokens in this window.\nSwitch the ranking period or refresh."
-              : "No AI coding agents found.\nClaude, Codex, and Fireworks show up here once you've used them."
+              : "No AI coding agents found.\nClaude and Codex show up here once you've used them."
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body

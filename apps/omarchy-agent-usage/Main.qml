@@ -539,7 +539,7 @@ Item {
   }
 
   // Device-scoped stats add up across machines; account-scoped stats
-  // (Fireworks' billing API) are replicas of the same upstream truth on
+  // are replicas of the same upstream truth on
   // every synced device, so the widest value wins — summing them would
   // double every token per machine.
   function combineNumber(additive, current, value) {

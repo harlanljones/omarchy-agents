@@ -62,17 +62,12 @@ light surfaces — and the bar glyph stands in when there is none.
 | `codex` | The Codex app-server RPC | native Codex CLI session files (plus pi and opencode sessions) |
 | `commandcode` | None — subscription-billed, token-only | `~/.commandcode/projects` session transcripts (per-message model and usage) |
 | `cursor` | Real Included/Auto/API percentages and billing reset from Cursor Agent's `/usage` view | Cursor chat stores plus real token totals from the `statusLine` hook |
-| `fireworks` | Estimated prepaid balance: configured funding minus rated account costs | Fireworks billing API, grouped by day and model for the last 30 days |
 | `cline` | Estimated from priced transcripts, or real dashboard figures via `/usage` (see below) | `~/.cline/data/sessions` transcripts (per-message token metrics and model attribution) |
 | `opencode` | Real Go Rolling/Weekly/Monthly figures via the Go scraper (see below), plus optional provider-scoped token quotas via `OPENCODE_USAGE_LIMITS` | opencode's local session storage (per-provider/model input/output/cache token totals) |
 
 Claude limits need a signed-in CLI; without credentials the panel says so and
 falls back to local stats only. A non-default Claude directory is honored via
-`CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`. Fireworks reads
-`FIREWORKS_API_KEY` and `FIREWORKS_ACCOUNT_ID` first, then
-`~/.fireworks/auth.ini` (which `firectl set-api-key` creates), then the key
-opencode stores in `~/.local/share/opencode/auth.json` when Fireworks is
-signed in there.
+`CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`.
 
 ### Cline dashboard limits
 
@@ -160,34 +155,6 @@ For the numbers on demand — or when the saved session has expired — the
 and otherwise walks you through reading the three windows off the page and
 recording them with the same override command.
 
-### Fireworks balance
-
-The collector first asks the account's `:getBalance` endpoint for the real
-prepaid ledger. That endpoint exists but is permission-gated, and as of
-August 2026 no console-issued API key passes it — Fireworks appears to
-reserve it for the dashboard session. The probe stays because it is cheap
-and the live figure lights up automatically if Fireworks ever opens it to
-keys. Until then the collector falls back to estimating the balance from
-configuration in `~/.config/omarchy/agents/fireworks.json`:
-
-```json
-{
-  "accountId": "",
-  "fundedAmount": 20,
-  "fundedAt": "2026-07-01"
-}
-```
-
-Set `fundedAmount` to the credits purchased and optionally `fundedAt` to the
-purchase date; with no date, the collector uses the account creation time. It
-subtracts rated account costs and the panel labels the result as estimated.
-For a later top-up, increase `fundedAmount` by the new credit while keeping
-the original `fundedAt`, so both the funding and spend still cover the same
-period. `accountId` only matters when one API key can access several
-accounts. Without a configured `fundedAmount` the tab still shows token
-usage, just no balance. With a live ledger, `fundedAmount` is optional and
-only adds the meter and the spent-of-funded line under the real figure.
-
 ## Interactions
 
 - Bar icon: left = panel, right = launch agent, middle = next subscription.
@@ -224,8 +191,7 @@ edit `shell.json` directly):
 omarchy bar set omarchy.agents providers '{
   "claude": { "enabled": true },
   "codex": { "enabled": false },
-  "commandcode": { "enabled": true },
-  "fireworks": { "enabled": true }
+  "commandcode": { "enabled": true }
 }' --json
 ```
 
@@ -236,12 +202,8 @@ the records regenerate.
 With `syncMode` on, every `*.json` snapshot in `syncDir` is merged, so today,
 the last 7 days, and the all-time totals cover every machine you code on —
 active days are unioned by date rather than summed. Rate limits stay
-per-account and are never merged. A record may declare `"scope": "account"`
-when its stats are account-global rather than machine-local (Fireworks'
-billing API); those merge by taking the widest value instead of summing, so
-the same account synced from two machines is not counted twice.
+per-account and are never merged.
 
 One caveat on "all-time": the Codex collector only reads native session files
-touched in the last 30 days, and Fireworks requests the last 30 days from its
-billing API, so their totals and day counts cover that window. Claude's cover
-every transcript still on disk.
+touched in the last 30 days, so their totals and day counts cover that
+window. Claude's cover every transcript still on disk.

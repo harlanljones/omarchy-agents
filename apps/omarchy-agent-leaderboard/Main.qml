@@ -102,12 +102,6 @@ Item {
     dataRevision++
   }
 
-  readonly property string fireworksHelper: {
-    var url = String(Qt.resolvedUrl("collect-fireworks.py"))
-    if (url.indexOf("file://") === 0) url = url.substring(7)
-    try { return decodeURIComponent(url) } catch (e) { return url }
-  }
-
   readonly property string antigravityHelper: {
     var url = String(Qt.resolvedUrl("collect-antigravity.py"))
     if (url.indexOf("file://") === 0) url = url.substring(7)
@@ -128,7 +122,6 @@ Item {
 
   Component.onCompleted: {
     rescanAgents()
-    runFireworksOfficial()
     runAntigravityCollector()
     runHermesCollector()
     runCommandCodeCollector()
@@ -149,7 +142,6 @@ Item {
     id: updateProcess
     running: false
     onExited: {
-      root.runFireworksOfficial()
       root.runAntigravityCollector()
       root.runHermesCollector()
       root.runCommandCodeCollector()
@@ -163,16 +155,6 @@ Item {
     stderr: StdioCollector {
       waitForEnd: true
       onStreamFinished: if (text.trim() !== "") console.warn("agent-leaderboard", text.trim())
-    }
-  }
-
-  Process {
-    id: fireworksProcess
-    running: false
-    onExited: root.rescanAgents()
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("agent-leaderboard/fireworks", text.trim())
     }
   }
 
@@ -204,15 +186,6 @@ Item {
       waitForEnd: true
       onStreamFinished: if (text.trim() !== "") console.warn("agent-leaderboard/commandcode", text.trim())
     }
-  }
-
-  function runFireworksOfficial() {
-    if (fireworksProcess.running || root.fireworksHelper === "") {
-      root.rescanAgents()
-      return
-    }
-    fireworksProcess.command = ["python3", root.fireworksHelper]
-    fireworksProcess.running = true
   }
 
   function runAntigravityCollector() {

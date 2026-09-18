@@ -144,21 +144,64 @@ export function parseJsonl(provider: string, path: string, content: string): { s
   return buildSession(provider, raws, { sessionId, project: project ?? null, path, sourceKey, fallbackTime, format: "jsonl" });
 }
 
-// Cline stores conversation history as a JSON array under
-// `tasks/<taskId>/api_conversation_history.json` (and tool calls in
-// `claude_api_calls.jsonl`). Each element is already a message-shaped object
-// ({ role, content, usage }), so it maps directly onto the shared event builder.
-// NOTE: validated structurally; no live Cline store was available at implementation
-// time, so the field mapping is a best-effort match of the documented format.
+// Cline CLI keeps one `<sessionId>.messages.json` per session at
+// `~/.cline/data/sessions/<sessionId>/` (plus a sibling metadata JSON).
+// Assistant messages carry per-turn `metrics` (inputTokens/outputTokens/
+// cacheReadTokens/cacheWriteTokens) and `modelInfo.id`; user messages carry
+// prompts and tool_result blocks answering earlier tool_use ids.
 export function parseCline(provider: string, path: string, content: string): { session: Session; events: Event[] } | null {
-  let data: any; try { data = JSON.parse(content); } catch { return null; }
-  const messages = Array.isArray(data) ? data : (data.messages ?? data.conversation ?? null);
-  if (!Array.isArray(messages) || !messages.length) return null;
+  let parsed: any = null;
+  try { parsed = JSON.parse(content); } catch { return null; }
+  const messages: any[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.messages) ? parsed.messages : [];
+  if (!messages.length) return null;
   const fallbackTime = statSync(path).mtime.toISOString();
+  const siblingPath = path.replace(/\.messages\.json$/, ".json");
+  let sibling: Record<string, any> = {};
+  try { sibling = obj(JSON.parse(readFileSync(siblingPath, "utf8"))); } catch { /* messages remain indexable */ }
+  const sessionId = String(parsed?.sessionId ?? parsed?.session_id ?? sibling.sessionId ?? sibling.session_id ?? basename(dirname(path)));
   const sourceKey = `${provider}:${path}`;
-  const sessionId = basename(dirname(path));
-  const project = first(messages.find(m => m.cwd)?.cwd, messages.find(m => m.project)?.project) ?? null;
-  return buildSession(provider, messages, { sessionId, project, path, sourceKey, fallbackTime, format: "cline-json" });
+  const raws: any[] = [];
+  for (const message of messages) {
+    const blocks = Array.isArray(message?.content) ? message.content : message?.content != null ? [message.content] : [];
+    const model = message?.modelInfo?.id ?? sibling.model;
+    const metrics = obj(message?.metrics);
+    const normalizedUsage = Object.keys(metrics).length ? {
+      inputTokens: metrics.inputTokens, outputTokens: metrics.outputTokens,
+      cacheReadTokens: metrics.cacheReadTokens ?? metrics.cacheReadInputTokens, cacheWriteTokens: metrics.cacheWriteTokens,
+    } : undefined;
+    const timestamp = epochIso(message?.ts, fallbackTime);
+    // Per-turn metrics repeat on every block of one assistant message, so
+    // attribute them once (first emitted event) instead of per block.
+    let usageAttributed = false;
+    const takeUsage = () => {
+      if (usageAttributed) return undefined;
+      usageAttributed = true;
+      return normalizedUsage;
+    };
+    if (message?.role === "assistant") {
+      for (const block of blocks) {
+        const part = obj(block);
+        if (part.type === "tool_use" && part.id) {
+          raws.push({ id: part.id, role: "tool", content: part.input ?? {}, name: part.name, model, usage: takeUsage(), timestamp });
+        } else if (part.type === "text" && part.text) {
+          raws.push({ id: message.id, role: "assistant", content: part.text, model, usage: takeUsage(), timestamp });
+        } else if (part.type === "thinking" && part.thinking) {
+          raws.push({ id: message.id, role: "assistant", content: part.thinking, model, timestamp });
+        }
+      }
+    } else if (message?.role === "user") {
+      for (const block of blocks) {
+        const part = obj(block);
+        if (part.type === "tool_result") {
+          raws.push({ id: part.tool_use_id, role: "tool_result", content: part.content, timestamp });
+        } else if (part.type === "text" && part.text) {
+          raws.push({ id: message.id, role: "user", content: part.text, timestamp });
+        }
+      }
+    }
+  }
+  if (!raws.length) return null;
+  return buildSession(provider, raws, { sessionId, project: first(sibling.cwd, sibling.workspace_root) ?? null, path, sourceKey, fallbackTime, format: "cline-messages-json" });
 }
 
 // Antigravity emits its real transcripts as JSONL at
@@ -182,69 +225,6 @@ export function parseAntigravity(provider: string, path: string, content: string
     return { ...step, role, timestamp: step.created_at, content: step.content ?? "" };
   });
   return buildSession(provider, mapped, { sessionId, project: null, path, sourceKey, fallbackTime, format: "antigravity-jsonl" });
-}
-
-// Evot writes one JSON array per turn. Each envelope carries an `item`; assistant
-// items can contain both prose and tool-call blocks, while session.json beside the
-// transcript is the authoritative source for project, model, and aggregate tokens.
-export function parseEvot(provider: string, path: string, content: string): { session: Session; events: Event[] } | null {
-  const fallbackTime = statSync(path).mtime.toISOString();
-  const envelopes: any[] = [];
-  for (const line of content.split(/\r?\n/).filter(Boolean)) {
-    try {
-      const batch = JSON.parse(line);
-      if (Array.isArray(batch)) envelopes.push(...batch);
-      else if (batch && typeof batch === "object") envelopes.push(batch);
-    } catch { /* skip malformed turn batches */ }
-  }
-  if (!envelopes.length) return null;
-
-  let metadata: Record<string, any> = {};
-  const metadataPath = join(dirname(path), "session.json");
-  try { metadata = obj(JSON.parse(readFileSync(metadataPath, "utf8"))); } catch { /* transcript remains indexable */ }
-  const sessionId = String(metadata.session_id ?? envelopes.find(row => row.session_id)?.session_id ?? id(`${provider}:${path}`));
-  const mapped: any[] = [];
-  for (const envelope of envelopes) {
-    const item = obj(envelope.item ?? envelope);
-    const timestamp = item.timestamp ?? envelope.timestamp ?? metadata.updated_at ?? metadata.created_at;
-    if (item.type === "user") {
-      mapped.push({ role: "user", content: item.text ?? item.content, timestamp });
-    } else if (item.type === "assistant") {
-      const blocks = Array.isArray(item.content) ? item.content : [{ type: "text", text: item.content ?? item.text }];
-      const textBlocks = blocks.filter((block: any) => block?.type === "text" && block.text);
-      if (textBlocks.length) mapped.push({ role: "assistant", content: textBlocks, timestamp, model: item.model, usage: item.usage });
-      for (const block of blocks.filter((candidate: any) => candidate?.type === "tool_call")) {
-        mapped.push({ role: "tool", content: block.input ?? {}, name: block.name, timestamp });
-      }
-    } else if (item.type === "tool_result") {
-      mapped.push({ role: "tool_result", content: item.content, name: item.tool_name, timestamp });
-    }
-  }
-  if (!mapped.length) return null;
-
-  const base = buildSession(provider, mapped, {
-    sessionId,
-    project: first(metadata.cwd, metadata.project) ?? null,
-    path,
-    sourceKey: `${provider}:${path}`,
-    fallbackTime,
-    format: "evot-jsonl",
-    extraMeta: {
-      evotProvider: metadata.provider ?? null,
-      contextTokens: tokenNumber(metadata.context_tokens),
-      contextBudget: tokenNumber(metadata.context_budget),
-    },
-  });
-  base.session = NormalizedSession.parse({
-    ...base.session,
-    model: first(metadata.model, base.session.model) ?? null,
-    title: first(metadata.title, base.session.title) ?? basename(path),
-    startedAt: iso(metadata.created_at, base.session.startedAt),
-    endedAt: iso(metadata.updated_at, base.session.endedAt ?? base.session.startedAt),
-    tokenInput: tokenNumber(metadata.total_input_tokens) || base.session.tokenInput,
-    tokenOutput: tokenNumber(metadata.total_output_tokens) || base.session.tokenOutput,
-  });
-  return base;
 }
 
 // Command Code writes one JSONL file per session under
@@ -329,6 +309,15 @@ export interface ProviderIntake {
   index?: () => void;
 }
 
+// Providers with a local transcript/session store the indexer can read.
+// Cursor, Hermes, and Pi deliberately stay metrics-only: Cursor keeps chat
+// transcripts plus per-call turn logs but no per-turn model attribution worth
+// re-indexing, Hermes's agent sqlite is an operational store (sessions +
+// messages joined across live gateway writes — the collect-hermes.py usage
+// record is its stable contract), and Pi transcripts carry zeroed aggregate
+// usage blocks (only per-message input/output are trustworthy). Coverage
+// labels stay derived from intake presence, so any future parse/index wiring
+// here automatically flips provider + ranking + limits coverage together.
 export const PROVIDERS: ProviderIntake[] = [
   { id: "claude", name: "Claude", roots: [{ path: `${home}/.claude/projects`, kinds: [".jsonl"] }], parse: parseJsonl },
   { id: "codex", name: "Codex", roots: [{ path: `${home}/.codex/sessions`, kinds: [".jsonl"] }], parse: parseJsonl },
@@ -336,12 +325,17 @@ export const PROVIDERS: ProviderIntake[] = [
     id: "cline",
     name: "Cline",
     roots: [{
-      path: `${home}/.local/share/cline`,
-      kinds: [".json", ".jsonl"],
-      match: p => /api_conversation_history\.json$/.test(p) || /claude_api_calls\.jsonl$/.test(p),
+      path: `${home}/.cline/data/sessions`,
+      kinds: [".json"],
+      match: p => /\.messages\.json$/.test(p),
     }],
     parse: parseCline,
   },
+  // Cursor: metrics-only (no intake). Its store is ~/.config/cursor/chats +
+  // per-call turn logs at ~/.local/state/omarchy/agents/cursor, but neither
+  // carries per-turn model attribution the indexer could trust — the
+  // omarchy-agent-usage-cursor record is the source of truth.
+  { id: "cursor", name: "Cursor" },
   {
     id: "antigravity",
     name: "Antigravity",
@@ -351,16 +345,6 @@ export const PROVIDERS: ProviderIntake[] = [
       match: p => /\.system_generated\/logs\/transcript\.jsonl$/.test(p),
     }],
     parse: parseAntigravity,
-  },
-  {
-    id: "evot",
-    name: "Evot",
-    roots: [{
-      path: `${home}/.evotai/sessions`,
-      kinds: [".jsonl"],
-      match: p => /\/transcript\.jsonl$/.test(p),
-    }],
-    parse: parseEvot,
   },
   // OpenCode is indexed through its sqlite store, not file walking (see indexOpenCode).
   { id: "opencode", name: "OpenCode", roots: [{ path: `${home}/.local/share/opencode`, kinds: [".json", ".jsonl"] }] },
@@ -377,9 +361,15 @@ export const PROVIDERS: ProviderIntake[] = [
     }],
     parse: parseCommandCode,
   },
-  // Fireworks is usage-collector only: no transcript store, so it stays metrics-only
-  // and intentionally has no intake.
-  { id: "fireworks", name: "Fireworks" },
+  // Hermes: metrics-only (no intake). Its agent sqlite at ~/.hermes/state.db
+  // is an operational store — collect-hermes.py already compiles per-model
+  // buckets plus estimated/actual cost, which is the stable contract.
+  { id: "hermes", name: "Hermes" },
+  // Pi: metrics-only (no intake). Its transcripts carry zeroed aggregate
+  // blocks, so only per-message input/output would survive indexing — the
+  // omarchy-agent-usage-pi record (which already buckets those per message)
+  // is the source of truth.
+  { id: "pi", name: "Pi" },
 ];
 
 export const isIndexed = (id: string) => PROVIDERS.some(p => p.id === id && (p.parse || p.index));

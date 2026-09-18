@@ -10,7 +10,7 @@ An Omarchy bar widget that ranks **token usage across every coding agent** on th
 
 It is a comparison board, not a per-subscription meter. The first-party Agents widget still owns limits, pace, and the model breakdown for one tool at a time. This panel answers a different question: *who is spending the tokens?*
 
-The board is display-only. It watches the usage records that `omarchy-agent-usage-update` writes to `~/.local/state/omarchy/agents/usage/` and ranks whatever appears there. Antigravity, Claude, Cline, Codex, Command Code, Fireworks, Grok, Hermes, and opencode are enabled and supported. Any other collector that writes the same record contract — a future agent — shows up on the next refresh. The Grok mark is a stand-in until Omarchy ships one. The same files live in `~/.config/omarchy/agents/assets/` and in the cloned Agents plugin (`harlan.agents`) so the first-party-style panel can show Grok too.
+The board is display-only. It watches the usage records that `omarchy-agent-usage-update` writes to `~/.local/state/omarchy/agents/usage/` and ranks whatever appears there. Antigravity, Claude, Cline, Codex, Command Code, Grok, Hermes, and opencode are enabled and supported. Any other collector that writes the same record contract — a future agent — shows up on the next refresh. The Grok mark is a stand-in until Omarchy ships one. The same files live in `~/.config/omarchy/agents/assets/` and in the cloned Agents plugin (`harlan.agents`) so the first-party-style panel can show Grok too.
 
 ## Install
 
@@ -80,7 +80,6 @@ The last-seven-days chart always shows token volume, not spend — it is about h
 - **Command Code:** Collected via `collect-commandcode.py` bundled with this plugin (invoked during refresh). Parses session transcripts under `~/.commandcode/projects/` for per-model token totals; subscription-billed, so token-only with no limits.
 - **OpenCode:** Parsed from SQLite storage `~/.local/share/opencode/opencode.db` via `omarchy-agent-usage-opencode`.
 - **Hermes (`hermes`):** Collected via `collect-hermes.py` bundled with this plugin (invoked during refresh). Reads Hermes Agent's SQLite state at `~/.hermes/state.db` read-only (sessions, per-model usage, user-message counts) and writes `hermes.json`.
-- **Fireworks:** Omarchy's official collector asks the Fireworks billing API. Console/OpenCode keys work, but Cloudflare blocks the request because the collector sends no User-Agent and then reports a fake "cannot read billing" error. This plugin reruns that same official collector with a User-Agent (`collect-fireworks.py`) and writes `fireworks.json`. Sign in to Fireworks in OpenCode, or set `FIREWORKS_API_KEY` / `firectl set-api-key`.
 
 ## Configure
 
@@ -107,7 +106,6 @@ omarchy bar set harlan.agent-leaderboard providers '{
   "cline": { "enabled": true },
   "codex": { "enabled": true },
   "commandcode": { "enabled": true },
-  "fireworks": { "enabled": true },
   "hermes": { "enabled": true },
   "opencode": { "enabled": true }
 }' --json
@@ -133,7 +131,7 @@ That deletes the plugin folder. It does **not** remove `~/.local/state/omarchy/a
 
 ## Attribution
 
-- Panel structure and the Claude / Codex / Fireworks marks follow Omarchy’s first-party Agents widget (MIT, David Heinemeier Hansson / Omarchy).
+- Panel structure and the Claude / Codex marks follow Omarchy’s first-party Agents widget (MIT, David Heinemeier Hansson / Omarchy).
 - The Antigravity mark follows the Google Antigravity CLI brand mark.
 - The Cline mark follows the Cline brand icon.
 - The Hermes mark is traced from the official Hermes Desktop icon (MIT, [Nous Research](https://github.com/NousResearch/hermes-agent)). Hermes usage is collected from the local Hermes Agent state database.

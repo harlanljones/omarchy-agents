@@ -40,8 +40,9 @@ const cline = record({
   modelUsage: { "deepseek-v4-flash": { inputTokens: 40_000, outputTokens: 1_000, cacheReadInputTokens: 20_000, cacheCreationInputTokens: 0 } },
 });
 
-const fireworks = record({
-  id: "fireworks", name: "Fireworks", ready: true, tierLabel: "Prepaid",
+// Stand-in for a generic prepaid-billing provider since Fireworks was removed.
+const prepaidFallback = record({
+  id: "prepaid", name: "Prepaid", ready: true, tierLabel: "Prepaid",
   updatedAt: "2026-08-23T12:00:00Z",
   balance: { remaining: 8, funded: 20, spent: 12, currency: "USD", estimated: true },
   todayTotalTokens: 0,
@@ -74,7 +75,7 @@ describe("platform normalization", () => {
     expect(headroomOf(platform)).toBeCloseTo(0.27);
   });
   test("prepaid balance converts to headroom and flags estimates", () => {
-    const platform = buildPlatformLimits(fireworks, NOW);
+    const platform = buildPlatformLimits(prepaidFallback, NOW);
     expect(platform.balance?.remaining).toBe(8);
     expect(platform.balance?.estimated).toBe(true);
     expect(headroomOf(platform)).toBeCloseTo(0.4);
@@ -96,7 +97,7 @@ describe("platform normalization", () => {
 
 describe("advisor", () => {
   test("general mode ranks by headroom and explains each row", () => {
-    const advice = advise([claude, cline, fireworks, codex], null, NOW);
+    const advice = advise([claude, cline, prepaidFallback, codex], null, NOW);
     expect(advice.mode).toBe("general");
     expect(advice.rows[0].providerId).toBe("codex");
     expect(advice.rows[0].verdict).toBe("usable");
@@ -109,7 +110,7 @@ describe("advisor", () => {
     expect(clineRow.reasons.some(r => r.startsWith("Only 5% left"))).toBe(true);
     expect(clineRow.reasons.join(" ")).toContain("Weekly 95% used");
     expect(advice.confidence).toBe("medium");
-    expect(advice.fallbackProviderName).toBe("Fireworks");
+    expect(advice.fallbackProviderName).toBe("Prepaid");
     expect(advice.recommendationResetsAt).toBeNull();
   });
   test("all-constrained boards produce a wait-for-refresh verdict line", () => {

@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import * as providerModule from "../src/server/providers";
 
 const { PROVIDERS, isIndexed, parseCline, parseAntigravity, parseCommandCode, parseJsonl } = providerModule;
-
 describe("provider registry", () => {
   test("coverage is derived from the registry, not a hardcoded list", () => {
     expect(isIndexed("claude")).toBe(true);
@@ -13,117 +12,73 @@ describe("provider registry", () => {
     expect(isIndexed("cline")).toBe(true);
     expect(isIndexed("antigravity")).toBe(true);
     expect(isIndexed("commandcode")).toBe(true);
-    expect(isIndexed("evot")).toBe(true);
     // OpenCode exposes a cursor-based indexer; simulate the wiring done in indexer.ts.
     PROVIDERS.find(p => p.id === "opencode")!.index = () => {};
     expect(isIndexed("opencode")).toBe(true);
-    // Fireworks is usage-collector only and stays metrics-only.
-    expect(isIndexed("fireworks")).toBe(false);
+    // Cursor, Hermes, and Pi are usage-collector only and stay metrics-only.
+    expect(isIndexed("cursor")).toBe(false);
+    expect(isIndexed("hermes")).toBe(false);
+    expect(isIndexed("pi")).toBe(false);
   });
 
   test("every indexed provider declares an intake (parser or indexer)", () => {
     for (const p of PROVIDERS) {
-      if (p.id === "fireworks") continue;
+      if (["cursor", "hermes", "pi"].includes(p.id)) continue;
       expect(p.parse || p.index).toBeTruthy();
     }
   });
-});
 
-describe("Evot transcript intake adapter", () => {
-  test("flattens batched transcript items and uses authoritative session metadata", () => {
-    const parseEvot = (providerModule as Record<string, unknown>).parseEvot as typeof parseJsonl | undefined;
-    expect(parseEvot).toBeFunction();
-    const dir = mkdtempSync(join(tmpdir(), "evot-intake-"));
-    const sessionDir = join(dir, "session-123");
-    mkdirSync(sessionDir, { recursive: true });
-    const path = join(sessionDir, "transcript.jsonl");
-    writeFileSync(join(sessionDir, "session.json"), JSON.stringify({
-      session_id: "session-123",
-      cwd: "/work/evot-project",
-      title: "Fix the deployment",
-      model: "gpt-5.6-luna",
-      provider: "evot-free",
-      created_at: "2026-08-28T10:00:00Z",
-      updated_at: "2026-08-28T10:05:00Z",
-      total_input_tokens: 1200,
-      total_output_tokens: 300,
-      context_tokens: 900,
-      context_budget: 1000000,
-    }));
-    writeFileSync(path, [
-      JSON.stringify([
-        { session_id: "session-123", seq: 1, item: { type: "user", text: "fix it" } },
-        { session_id: "session-123", seq: 2, item: { type: "assistant", timestamp: "2026-08-28T10:01:00Z", content: [
-          { type: "text", text: "working" },
-          { type: "tool_call", id: "call-1", name: "bash", input: { cmd: "true" } },
-        ] } },
-        { session_id: "session-123", seq: 3, item: { type: "tool_result", tool_call_id: "call-1", tool_name: "bash", content: "ok", is_error: false } },
-        { session_id: "session-123", seq: 4, item: { type: "stats", kind: "llm_call_completed", data: { usage: { input_tokens: 99, output_tokens: 10 } } } },
-      ]),
-    ].join("\n"));
-
-    const result = parseEvot!("evot", path, readFileSync(path, "utf8"))!;
-    expect(result.session.id).toBe("session-123");
-    expect(result.session.project).toBe("/work/evot-project");
-    expect(result.session.title).toBe("Fix the deployment");
-    expect(result.session.model).toBe("gpt-5.6-luna");
-    expect(result.session.tokenInput).toBe(1200);
-    expect(result.session.tokenOutput).toBe(300);
-    expect(result.session.toolCount).toBe(1);
-    expect(result.events.map(event => event.kind)).toEqual(["prompt", "response", "tool_call", "tool_result"]);
-    expect(result.events.find(event => event.kind === "tool_call")?.toolName).toBe("bash");
-    expect(result.session.metadata).toMatchObject({ format: "evot-jsonl", evotProvider: "evot-free", contextTokens: 900, contextBudget: 1000000 });
-  });
-
-  test("falls back to per-turn usage when an interrupted session leaves zero aggregates", () => {
-    const dir = mkdtempSync(join(tmpdir(), "evot-zero-aggregate-"));
-    const sessionDir = join(dir, "session-zero");
-    mkdirSync(sessionDir, { recursive: true });
-    const path = join(sessionDir, "transcript.jsonl");
-    writeFileSync(join(sessionDir, "session.json"), JSON.stringify({
-      session_id: "session-zero",
-      cwd: "/work/interrupted",
-      model: "gpt-5.6-luna",
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-    }));
-    writeFileSync(path, JSON.stringify([
-      { session_id: "session-zero", seq: 1, item: { type: "assistant", content: [{ type: "text", text: "partial" }], usage: { input: 90, output: 10, cache_read: 5, cache_write: 2 } } },
-    ]));
-
-    const parseEvot = (providerModule as Record<string, unknown>).parseEvot as typeof parseJsonl;
-    const result = parseEvot("evot", path, readFileSync(path, "utf8"))!;
-    expect(result.session.tokenInput).toBe(90);
-    expect(result.session.tokenOutput).toBe(10);
-    expect(result.session.cacheRead).toBe(5);
-    expect(result.session.cacheWrite).toBe(2);
+  test("cline intake points at the live CLI store", () => {
+    const cline = PROVIDERS.find(p => p.id === "cline")!;
+    expect(cline.roots![0].path.endsWith(".cline/data/sessions")).toBe(true);
+    const match = cline.roots![0].match!;
+    expect(match("session.messages.json")).toBe(true);
+    expect(match("session.json")).toBe(false);
+    expect(match("1787278971450_cks8j.json")).toBe(false);
+    expect(match(join("tasks", "abc", "api_conversation_history.json"))).toBe(false);
   });
 });
 
-describe("Cline JSON intake adapter", () => {
-  test("maps a conversation history array into a session + events", () => {
+describe("Cline CLI intake adapter", () => {
+  test("maps a .messages.json session plus sibling metadata into a session + events", () => {
     const dir = mkdtempSync(join(tmpdir(), "cline-intake-"));
-    const taskDir = join(dir, "task-abc-123");
-    mkdirSync(join(taskDir, "nested"), { recursive: true });
-    const path = join(taskDir, "api_conversation_history.json");
-    writeFileSync(path, JSON.stringify([
-      { role: "user", content: "write a function" },
-      { role: "assistant", content: "here you go", usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 2 } },
-      { role: "tool", content: "ran command", tool_name: "bash" },
-    ]));
+    const sessionDir = join(dir, "1787278971450_cks8j");
+    mkdirSync(sessionDir, { recursive: true });
+    const path = join(sessionDir, "1787278971450_cks8j.messages.json");
+    writeFileSync(join(sessionDir, "1787278971450_cks8j.json"), JSON.stringify({
+      sessionId: "1787278971450_cks8j", cwd: "/work/herdr-outpost",
+      provider: "cline-pass", model: "cline-pass/kimi-k3",
+    }));
+    writeFileSync(path, JSON.stringify({
+      sessionId: "1787278971450_cks8j",
+      messages: [
+        { id: "msg-1", role: "user", ts: 1787279046309, content: [{ type: "text", text: "write a function" }] },
+        {
+          id: "msg-2", role: "assistant", ts: 1787279051057,
+          modelInfo: { id: "cline-pass/kimi-k3", provider: "cline-pass" },
+          metrics: { inputTokens: 5894, outputTokens: 196, cacheReadTokens: 5893, cacheWriteTokens: 0, cost: 0.02 },
+          content: [
+            { type: "text", text: "here you go" },
+            { type: "tool_use", id: "run_commands_0", name: "run_commands", input: { commands: ["true"] } },
+          ],
+        },
+        { id: "msg-3", role: "user", ts: 1787279052000, content: [{ type: "tool_result", tool_use_id: "run_commands_0", name: "run_commands", content: "ok" }] },
+      ],
+    }));
     const result = parseCline("cline", path, readFileSync(path, "utf8"))!;
     expect(result).not.toBeNull();
-    expect(result.session.id).toBe("task-abc-123");
-    expect(result.events).toHaveLength(3);
-    expect(result.events.map(e => e.kind)).toEqual(["prompt", "response", "tool_call"]);
-    expect(result.session.tokenInput).toBe(10);
-    expect(result.session.tokenOutput).toBe(5);
-    expect(result.session.cacheRead).toBe(2);
+    expect(result.session.id).toBe("1787278971450_cks8j");
+    expect(result.session.project).toBe("/work/herdr-outpost");
+    expect(result.session.model).toBe("cline-pass/kimi-k3");
+    expect(result.events.map(e => e.kind)).toEqual(["prompt", "response", "tool_call", "tool_result"]);
+    expect(result.session.tokenInput).toBe(5894);
+    expect(result.session.tokenOutput).toBe(196);
+    expect(result.session.cacheRead).toBe(5893);
     expect(result.session.toolCount).toBe(1);
   });
 
-  test("returns null for non-array content", () => {
-    expect(parseCline("cline", "/x/cline/tasks/t/api_conversation_history.json", "{ not an array }")).toBeNull();
+  test("returns null for non-message content", () => {
+    expect(parseCline("cline", "/x/.cline/data/sessions/s/s.messages.json", "{ not messages }")).toBeNull();
   });
 });
 

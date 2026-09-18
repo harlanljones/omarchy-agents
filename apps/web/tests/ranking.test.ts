@@ -14,8 +14,10 @@ describe("desktop-compatible ranking", () => {
     const withCline = [...records, { id: "cline", name: "Cline", todayTotalTokens: 50, recentDays: [{ date: "2026-08-22", messageCount: 50 }], modelUsage: { deep: { inputTokens: 40, outputTokens: 10 } } }];
     const clineRow = rank(withCline, "today").rows.find(r => r.providerId === "cline")!;
     expect(clineRow.coverage).toBe("indexed");
-    const fireworks = rank([{ id: "fireworks", name: "Fireworks", todayTotalTokens: 50, recentDays: [{ date: "2026-08-22", messageCount: 50 }] }], "today").rows[0];
-    expect(fireworks.coverage).toBe("metrics-only");
+    for (const id of ["cursor", "hermes", "pi"]) {
+      const row = rank([{ id, name: id, todayTotalTokens: 50, recentDays: [{ date: "2026-08-22", messageCount: 50 }] }], "today").rows[0];
+      expect(row.coverage).toBe("metrics-only");
+    }
   });
   test("computes estimated spending per row and total spending", () => {
     const pricedRecords = [

@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "Agent Leaderboard",
-    "description": "One bar icon and one panel: a ranked board of Claude, Codex, Fireworks, and any other agent that writes a usage record.",
+    "description": "One bar icon and one panel: a ranked board of Claude, Codex, and any other agent that writes a usage record.",
     "category": "AI",
     "aliases": ["leaderboard", "agent-leaderboard", "token-leaderboard"],
     "allowMultiple": false,
@@ -23,7 +23,6 @@
         "claude": { "enabled": true },
         "codex": { "enabled": true },
         "commandcode": { "enabled": true },
-        "fireworks": { "enabled": true },
         "grok": { "enabled": false },
         "opencode": { "enabled": true }
       },

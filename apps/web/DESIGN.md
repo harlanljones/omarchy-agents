@@ -22,10 +22,8 @@ colors:
   provider-codex: "#10b981"
   provider-cline: "#70d480"
   provider-antigravity: "#4285f4"
-  provider-fireworks: "#ff7830"
   provider-opencode: "#bd85f2"
   provider-commandcode: "#f472b6"
-  provider-evot: "#38bdf8"
   provider-fallback: "#64748b"
   scrollbar: "#26303d"
   status-text: "#94a3b8"
@@ -200,7 +198,7 @@ The palette is nearly monochrome and blue-cool, with a muted trophy gold for ori
 
 ### Tertiary
 
-- **Provider Clay, Provider Green, Provider Lime, Provider Blue, Provider Orange, and Provider Violet**: Identify Claude, Codex, Cline, Antigravity, Fireworks, and opencode in marks, chart stacks, and share bars. Keep each hue bound to its provider.
+- **Provider Clay, Provider Green, Provider Lime, Provider Scarlet, Provider Blue, Provider Violet, Provider Rose, Provider Pink, and Provider Sage**: Identify Claude, Codex, Cline, Cursor, Antigravity, OpenCode, Command Code, Hermes, and Pi in marks, chart stacks, and share bars. Keep each hue bound to its provider.
 - **Status Green, Status Amber, and Status Red**: Signal ready/indexed, warning/metrics-only, and error states. Always pair the dot with a text label.
 
 ### Neutral
@@ -337,7 +335,7 @@ Borders are thin and low-contrast. Large panels are not rounded containers; the 
 ### Standings and History
 
 - **Rows:** A semantic table rendered as a five-column grid on desktop, with a 35px header and at least 63px per data row. Rank and token values use the data face; provider name remains sans-serif.
-- **Coverage:** Preserve the explicit `indexed` and `metrics-only` truth labels. Claude, Codex, and opencode currently report indexed transcript coverage; Fireworks, Cline, and Antigravity currently report collector metrics only.
+- **Coverage:** Preserve the explicit `indexed` and `metrics-only` truth labels. Claude, Codex, Cline, Antigravity, Command Code, and OpenCode currently report indexed transcript coverage; Cursor, Hermes, and Pi currently report collector metrics only.
 - **Provider Mark:** A 30px rounded tile holds the provider SVG at 17px. Its background is a 13% mix of the provider hue; a two-letter mono fallback appears if the asset fails.
 - **Share Bar:** A 24px square-ended track uses a provider-colored fill at 45% opacity with the percentage overlaid at the right edge.
 - **History:** Stacked provider bars use the same provider mapping and only 2px corner softening. A textual figure caption and screen-reader summary keep the chart subordinate to exact evidence.

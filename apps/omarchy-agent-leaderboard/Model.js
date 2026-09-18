@@ -147,7 +147,14 @@ var BUILT_IN_PRICING = [
   { match: "gpt-oss", inputPerMtok: 0.2, outputPerMtok: 0.3, cacheReadPerMtok: 0.02, cacheWritePerMtok: 0.25, asOf: PRICING_AS_OF },
   { match: "ox-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
   { match: "x-preview", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
-  { match: "big-pickle", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF }
+  { match: "big-pickle", inputPerMtok: 2.5, outputPerMtok: 10, cacheReadPerMtok: 0.25, cacheWritePerMtok: 2.5, asOf: PRICING_AS_OF },
+  { match: "qwen3.8:pi", inputPerMtok: 0.55, outputPerMtok: 2.2, cacheReadPerMtok: 0.055, cacheWritePerMtok: 0.55, asOf: PRICING_AS_OF },
+  { match: "step-3", inputPerMtok: 0.3, outputPerMtok: 1.2, cacheReadPerMtok: 0.03, cacheWritePerMtok: 0.375, asOf: PRICING_AS_OF },
+  { match: "z-ai-glm-5-3-flash", inputPerMtok: 0.6, outputPerMtok: 2.5, cacheReadPerMtok: 0.06, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
+  { match: "z-ai/glm-5.3-flash", inputPerMtok: 0.6, outputPerMtok: 2.5, cacheReadPerMtok: 0.06, cacheWritePerMtok: 0.6, asOf: PRICING_AS_OF },
+  { match: "hy4", inputPerMtok: 0.15, outputPerMtok: 0.6, cacheReadPerMtok: 0.015, cacheWritePerMtok: 0.1875, asOf: PRICING_AS_OF },
+  { match: "union-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF },
+  { match: "stealth-ox-alpha", inputPerMtok: 2.4, outputPerMtok: 12, cacheReadPerMtok: 0.24, cacheWritePerMtok: 3, asOf: PRICING_AS_OF }
 ]
 
 // OpenCode (and other routers) store usage per provider/model, so a model key
@@ -156,7 +163,7 @@ var BUILT_IN_PRICING = [
 // Strip the leading provider segment (repeatedly, in case providers nest)
 // before matching against the rate table.
 var PROVIDER_PREFIXES = [
-  "cloudflare-workers-ai", "opencode-go", "cheaper-inference", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
+  "cloudflare-workers-ai", "opencode-go", "cheaper-inference", "cline-pass", "bai-gpt", "bai-glm", "bai-google", "aihubmix", "antigravity",
   "openrouter", "gmicloud", "aerolink", "gorouter", "orcarouter", "nano-gpt", "openai", "anthropic",
   "microsoft", "google", "meta", "models", "freetoken", "opencode", "venice", "nous", "groq", "x-ai",
   "upstage", "tencent", "bai", "z-ai", "@cf"

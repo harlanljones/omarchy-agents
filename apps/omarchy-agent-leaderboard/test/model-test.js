@@ -92,21 +92,11 @@ const records = [
       "glm-5.3-flash": { inputTokens: 150_000, outputTokens: 10_000, cacheReadInputTokens: 140_000, cacheCreationInputTokens: 0 },
       "kimi-k3": { inputTokens: 50_000, outputTokens: 5_000, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 }
     }
-  },
-  {
-    id: "fireworks",
-    name: "Fireworks",
-    todayTotalTokens: 0,
-    totalPrompts: 0,
-    totalSessions: 0,
-    activeDays: 0,
-    recentDays: [],
-    modelUsage: {}
   }
 ]
 
 const today = M.rankRecords(records, "today")
-assertEqual(today.rows.length, 3, "today hides Fireworks with no tokens")
+assertEqual(today.rows.length, 3, "today hides agents with no tokens")
 assertEqual(today.rows[0].providerId, "claude", "Claude leads today")
 assertEqual(today.rows[1].providerId, "codex", "Codex is second today")
 assertEqual(today.rows[2].providerId, "cline", "Cline ranks today")
